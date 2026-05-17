@@ -11,12 +11,12 @@ export interface Profile {
 
 export interface Client {
   id: string;
+  company_name: string;
   profile_id: string;
   industry: string;
   engagement_start: string;
   engagement_status: 'active' | 'paused' | 'completed';
   notes?: string;
-  company_name?: string; // Joined from profile
 }
 
 export interface MaturityScore {
