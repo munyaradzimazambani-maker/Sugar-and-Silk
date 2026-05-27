@@ -145,8 +145,10 @@ export default function AdminClientListPage() {
                     </div>
                     {/* Admin action placeholder */}
                     <button
-                        onClick={() => setIsAddModalOpen(true)}
-                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-indigo-500/20"
+                        type="button"
+                        disabled
+                        title="Client onboarding requires creating and linking an auth profile first."
+                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-indigo-500/20 opacity-50 cursor-not-allowed"
                     >
                         <Plus className="w-4 h-4" />
                         Add Client
