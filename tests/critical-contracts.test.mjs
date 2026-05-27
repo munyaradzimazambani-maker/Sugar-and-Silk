@@ -22,8 +22,10 @@ test('admin RLS policies use the profile-backed admin helper', () => {
 });
 
 test('clients schema exposes the company_name field used by admin workflows', () => {
+  assert.match(schema, /profile_id UUID REFERENCES profiles\(id\) NOT NULL/);
   assert.match(schema, /CREATE TABLE clients \([\s\S]*company_name TEXT NOT NULL/);
   assert.match(adminListPage, /\.from\('clients'\)[\s\S]*\.order\('company_name', \{ ascending: true \}\)/);
+  assert.match(adminListPage, /Client onboarding requires creating and linking an auth profile first\./);
 });
 
 test('documents storage bucket is created by the schema', () => {

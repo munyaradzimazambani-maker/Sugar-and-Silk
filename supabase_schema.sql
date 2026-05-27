@@ -14,7 +14,7 @@ CREATE TABLE profiles (
 -- 2. Client Engagements
 CREATE TABLE clients (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  profile_id UUID REFERENCES profiles(id),
+  profile_id UUID REFERENCES profiles(id) NOT NULL,
   company_name TEXT NOT NULL,
   industry TEXT,
   engagement_start DATE DEFAULT CURRENT_DATE,
