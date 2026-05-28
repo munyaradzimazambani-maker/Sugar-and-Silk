@@ -819,7 +819,7 @@ export default function AdminClientDetailPage() {
                                             <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Category</label>
                                             <select
                                                 value={formData.category}
-                                                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                                                onChange={(e) => setFormData({ ...formData, category: e.target.value as AdminKpi['category'] })}
                                                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all appearance-none"
                                             >
                                                 <option value="marketing">Marketing</option>
