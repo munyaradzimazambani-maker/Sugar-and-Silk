@@ -5,13 +5,10 @@ import { motion } from 'framer-motion';
 import {
     Users,
     Search,
-    Filter,
     Plus,
     ArrowUpRight,
-    MoreHorizontal,
     Building2,
     Calendar,
-    ShieldCheck,
     ExternalLink,
     X,
     Trash2
@@ -26,10 +23,19 @@ type ClientProfileOption = {
     company_name: string | null;
 };
 
+type ClientRow = {
+    id: string;
+    profile_id: string;
+    company_name: string;
+    industry: string | null;
+    engagement_start: string;
+    engagement_status: 'active' | 'paused' | 'completed';
+};
+
 export default function AdminClientListPage() {
     const supabase = createClient();
     const [loading, setLoading] = useState(true);
-    const [clients, setClients] = useState<any[]>([]);
+    const [clients, setClients] = useState<ClientRow[]>([]);
     const [clientProfiles, setClientProfiles] = useState<ClientProfileOption[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -66,16 +72,16 @@ export default function AdminClientListPage() {
         }
 
         const normalizedClients = (clientData || [])
-            .map((client: any) => ({
+            .map((client) => ({
                 ...client,
                 company_name: client.profiles?.company_name || client.profiles?.full_name || 'Unnamed client'
             }))
-            .sort((a: any, b: any) => a.company_name.localeCompare(b.company_name));
+            .sort((a, b) => a.company_name.localeCompare(b.company_name));
 
         setClients(normalizedClients);
 
         if (profileData) {
-            const linkedProfileIds = new Set(normalizedClients.map((client: any) => client.profile_id));
+            const linkedProfileIds = new Set(normalizedClients.map((client) => client.profile_id));
             setClientProfiles(profileData.filter((profile) => !linkedProfileIds.has(profile.id)));
         }
         setLoading(false);

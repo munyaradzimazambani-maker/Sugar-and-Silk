@@ -8,14 +8,11 @@ import {
     ArrowLeft,
     Plus,
     Edit3,
-    Save,
     Trash2,
     Share2,
-    MoreVertical,
     ShieldCheck,
     Target,
     CheckSquare,
-    Clock,
     Upload,
     Loader2,
     File as LucideFile,
@@ -31,25 +28,88 @@ import { useParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
 
+type AdminTab = 'overview' | 'maturity' | 'kpis' | 'tasks' | 'documents' | 'roadmap';
+
+type AdminClient = {
+    id: string;
+    company_name: string;
+    industry: string | null;
+    engagement_start: string;
+    engagement_status: 'active' | 'paused' | 'completed';
+    profiles?: {
+        company_name: string | null;
+        full_name: string | null;
+    } | null;
+};
+
+type MaturityScore = {
+    id: string;
+    dimension: string;
+    score: number;
+};
+
+type AdminTask = {
+    id: string;
+    title: string;
+    status: 'todo' | 'in_progress' | 'done';
+    priority: 'low' | 'medium' | 'high';
+    due_date: string;
+};
+
+type AdminKpi = {
+    id: string;
+    name: string;
+    value: number;
+    target: number | null;
+    category: 'marketing' | 'sales' | 'financial';
+};
+
+type AdminDocument = {
+    id: string;
+    title: string;
+    file_url: string;
+    uploaded_at: string;
+};
+
+type RoadmapPhase = {
+    id: string;
+    phase_number: number;
+    title: string;
+    status: 'not_started' | 'in_progress' | 'completed';
+    start_date: string;
+    end_date: string;
+};
+
+type AdminFormData = Partial<{
+    dimension: string;
+    name: string;
+    value: number;
+    target: number;
+    category: AdminKpi['category'];
+    title: string;
+    priority: AdminTask['priority'];
+    phase_number: number;
+}>;
+
 export default function AdminClientDetailPage() {
     const supabase = createClient();
     const routeParams = useParams<{ id: string | string[] }>();
     const clientId = Array.isArray(routeParams.id) ? routeParams.id[0] : routeParams.id;
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'overview' | 'maturity' | 'kpis' | 'tasks' | 'documents' | 'roadmap'>('overview');
-    const [client, setClient] = useState<any>(null);
-    const [maturityScores, setMaturityScores] = useState<any[]>([]);
-    const [tasks, setTasks] = useState<any[]>([]);
-    const [kpis, setKpis] = useState<any[]>([]);
-    const [documents, setDocuments] = useState<any[]>([]);
-    const [roadmapPhases, setRoadmapPhases] = useState<any[]>([]);
+    const [activeTab, setActiveTab] = useState<AdminTab>('overview');
+    const [client, setClient] = useState<AdminClient | null>(null);
+    const [maturityScores, setMaturityScores] = useState<MaturityScore[]>([]);
+    const [tasks, setTasks] = useState<AdminTask[]>([]);
+    const [kpis, setKpis] = useState<AdminKpi[]>([]);
+    const [documents, setDocuments] = useState<AdminDocument[]>([]);
+    const [roadmapPhases, setRoadmapPhases] = useState<RoadmapPhase[]>([]);
     const [uploading, setUploading] = useState(false);
     const [uploadError, setUploadError] = useState<string | null>(null);
 
     // Modal states
     const [activeModal, setActiveModal] = useState<'maturity' | 'kpi' | 'task' | 'roadmap' | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [formData, setFormData] = useState<any>({});
+    const [formData, setFormData] = useState<AdminFormData>({});
 
     async function refreshDocuments(currentClientId: string) {
         const { data: updatedDocs } = await supabase
@@ -152,7 +212,7 @@ export default function AdminClientDetailPage() {
         fetchClientData();
     }, [clientId]);
 
-    const tabs = [
+    const tabs: Array<{ id: AdminTab; label: string; icon: typeof Building2 }> = [
         { id: 'overview', label: 'Overview', icon: Building2 },
         { id: 'maturity', label: 'Maturity', icon: ShieldCheck },
         { id: 'kpis', label: 'KPIs', icon: Target },
@@ -244,7 +304,7 @@ export default function AdminClientDetailPage() {
                 {tabs.map((tab) => (
                     <button
                         key={tab.id}
-                        onClick={() => setActiveTab(tab.id as any)}
+                        onClick={() => setActiveTab(tab.id)}
                         className={cn(
                             "flex items-center gap-2 pb-4 text-sm font-bold uppercase tracking-widest transition-all relative",
                             activeTab === tab.id ? "text-indigo-400" : "text-slate-500 hover:text-slate-300"
@@ -315,7 +375,7 @@ export default function AdminClientDetailPage() {
                                 <h4 className="text-sm font-bold text-white uppercase tracking-widest mb-6 text-slate-500">Internal Audit Logs</h4>
                                 <div className="space-y-4">
                                     <div className="p-4 rounded-xl bg-slate-950 border border-slate-800">
-                                        <p className="text-xs text-slate-400 leading-relaxed italic">"Initial data suggests {client.company_name} has high potential for automation roi. CEO and COO are aligned on the transition."</p>
+                                        <p className="text-xs text-slate-400 leading-relaxed italic">&quot;Initial data suggests {client.company_name} has high potential for automation roi. CEO and COO are aligned on the transition.&quot;</p>
                                         <div className="mt-3 flex items-center justify-between">
                                             <span className="text-[10px] text-slate-600 uppercase font-bold tracking-tight">Automated Log • By PCM System</span>
                                         </div>
@@ -637,6 +697,7 @@ export default function AdminClientDetailPage() {
                                                     .from('documents')
                                                     .createSignedUrl(doc.file_url, 60);
                                                 if (data?.signedUrl) window.open(data.signedUrl, '_blank');
+                                                if (error) console.error('Error generating signed URL:', error);
                                             }}
                                             className="p-2 text-slate-600 hover:text-indigo-400 transition-colors"
                                         >
@@ -829,6 +890,7 @@ export default function AdminClientDetailPage() {
                                                 score: 1,
                                                 assessed_at: new Date().toISOString().split('T')[0]
                                             }).select().single();
+                                            if (error) console.error('Error saving maturity score:', error);
                                             if (data) setMaturityScores(prev => [...prev, data]);
                                         } else if (activeModal === 'kpi') {
                                             const { data, error } = await supabase.from('kpis').insert({
@@ -839,6 +901,7 @@ export default function AdminClientDetailPage() {
                                                 category: formData.category,
                                                 recorded_at: new Date().toISOString().split('T')[0]
                                             }).select().single();
+                                            if (error) console.error('Error saving KPI:', error);
                                             if (data) setKpis(prev => [...prev, data]);
                                         } else if (activeModal === 'task') {
                                             const { data, error } = await supabase.from('tasks').insert({
@@ -848,6 +911,7 @@ export default function AdminClientDetailPage() {
                                                 priority: formData.priority,
                                                 due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
                                             }).select().single();
+                                            if (error) console.error('Error saving task:', error);
                                             if (data) setTasks(prev => [...prev, data]);
                                         } else if (activeModal === 'roadmap') {
                                             const { data, error } = await supabase.from('roadmap_phases').insert({
@@ -858,6 +922,7 @@ export default function AdminClientDetailPage() {
                                                 start_date: new Date().toISOString().split('T')[0],
                                                 end_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
                                             }).select().single();
+                                            if (error) console.error('Error saving roadmap phase:', error);
                                             if (data) setRoadmapPhases(prev => [...prev, data]);
                                         }
                                         setIsSubmitting(false);
