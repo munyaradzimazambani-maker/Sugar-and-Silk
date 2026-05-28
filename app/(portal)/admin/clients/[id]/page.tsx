@@ -395,7 +395,7 @@ export default function AdminClientDetailPage() {
                             <h3 className="text-xl font-bold text-white uppercase tracking-tight">Manage Maturity Matrix</h3>
                             <button
                                 onClick={() => {
-                                    setFormData({ dimension: '', score: 1 });
+                                    setFormData({ dimension: '' });
                                     setActiveModal('maturity');
                                 }}
                                 className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-500 transition-all"
