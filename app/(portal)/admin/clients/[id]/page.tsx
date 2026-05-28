@@ -91,6 +91,11 @@ type AdminFormData = Partial<{
     phase_number: number;
 }>;
 
+const KPI_CATEGORIES = ['marketing', 'sales', 'financial'] as const;
+const ROADMAP_STATUSES = ['not_started', 'in_progress', 'completed'] as const;
+const TASK_STATUSES = ['todo', 'in_progress', 'done'] as const;
+const TASK_PRIORITIES = ['low', 'medium', 'high'] as const;
+
 export default function AdminClientDetailPage() {
     const supabase = createClient();
     const routeParams = useParams<{ id: string | string[] }>();
@@ -477,7 +482,7 @@ export default function AdminClientDetailPage() {
                         </div>
 
                         <div className="space-y-4">
-                            {['marketing', 'sales', 'financial'].map((cat) => (
+                            {KPI_CATEGORIES.map((cat) => (
                                 <div key={cat} className="space-y-4">
                                     <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest pt-4 border-t border-slate-800/50">{cat}</h4>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -544,7 +549,7 @@ export default function AdminClientDetailPage() {
                                     </div>
 
                                     <div className="flex items-center gap-3">
-                                        {['not_started', 'in_progress', 'completed'].map((status) => (
+                                        {ROADMAP_STATUSES.map((status) => (
                                             <button
                                                 key={status}
                                                 onClick={async () => {
@@ -595,7 +600,7 @@ export default function AdminClientDetailPage() {
                         </div>
 
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                            {['todo', 'in_progress', 'done'].map((status) => (
+                            {TASK_STATUSES.map((status) => (
                                 <div key={status} className="space-y-4">
                                     <div className="flex items-center justify-between px-2">
                                         <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{status.replace('_', ' ')}</h4>
@@ -614,7 +619,7 @@ export default function AdminClientDetailPage() {
                                                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
                                                         <button
                                                             onClick={async () => {
-                                                                const nextStatus = status === 'todo' ? 'in_progress' : status === 'in_progress' ? 'done' : 'todo';
+                                                                const nextStatus: AdminTask['status'] = status === 'todo' ? 'in_progress' : status === 'in_progress' ? 'done' : 'todo';
                                                                 const { error } = await supabase.from('tasks').update({ status: nextStatus }).eq('id', task.id);
                                                                 if (!error) setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: nextStatus } : t));
                                                             }}
@@ -840,7 +845,7 @@ export default function AdminClientDetailPage() {
                                         <div>
                                             <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Priority</label>
                                             <div className="flex gap-2">
-                                                {['low', 'medium', 'high'].map((p) => (
+                                                {TASK_PRIORITIES.map((p) => (
                                                     <button
                                                         key={p}
                                                         onClick={() => setFormData({ ...formData, priority: p })}
