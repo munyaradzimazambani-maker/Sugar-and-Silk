@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
     Building2,
@@ -97,7 +97,7 @@ const TASK_STATUSES = ['todo', 'in_progress', 'done'] as const;
 const TASK_PRIORITIES = ['low', 'medium', 'high'] as const;
 
 export default function AdminClientDetailPage() {
-    const supabase = createClient();
+    const supabase = useMemo(() => createClient(), []);
     const routeParams = useParams<{ id: string | string[] }>();
     const clientId = Array.isArray(routeParams.id) ? routeParams.id[0] : routeParams.id;
     const [loading, setLoading] = useState(true);
@@ -215,7 +215,7 @@ export default function AdminClientDetailPage() {
             setLoading(false);
         }
         fetchClientData();
-    }, [clientId]);
+    }, [clientId, supabase]);
 
     const tabs: Array<{ id: AdminTab; label: string; icon: typeof Building2 }> = [
         { id: 'overview', label: 'Overview', icon: Building2 },

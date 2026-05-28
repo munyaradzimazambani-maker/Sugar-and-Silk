@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
     Users,
@@ -33,7 +33,7 @@ type ClientRow = {
 };
 
 export default function AdminClientListPage() {
-    const supabase = createClient();
+    const supabase = useMemo(() => createClient(), []);
     const [loading, setLoading] = useState(true);
     const [clients, setClients] = useState<ClientRow[]>([]);
     const [clientProfiles, setClientProfiles] = useState<ClientProfileOption[]>([]);
@@ -46,7 +46,7 @@ export default function AdminClientListPage() {
     });
     const [isCreating, setIsCreating] = useState(false);
 
-    async function fetchClients() {
+    const fetchClients = useCallback(async () => {
         setLoading(true);
         const [
             { data: clientData, error: clientsError },
@@ -85,11 +85,15 @@ export default function AdminClientListPage() {
             setClientProfiles(profileData.filter((profile) => !linkedProfileIds.has(profile.id)));
         }
         setLoading(false);
-    }
+    }, [supabase]);
 
     useEffect(() => {
-        fetchClients();
-    }, []);
+        const timer = window.setTimeout(() => {
+            void fetchClients();
+        }, 0);
+
+        return () => window.clearTimeout(timer);
+    }, [fetchClients]);
 
     async function handleCreateClient() {
         if (!newClient.profile_id) return;
