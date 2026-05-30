@@ -33,8 +33,25 @@ test('admin RLS uses profile role source instead of Supabase JWT role claim', ()
     'Supabase JWT role is authenticated/anon, not the app admin role',
   );
 
-  const adminPolicyCount = [...schema.matchAll(/CREATE POLICY admin_full_[\s\S]*?USING \(public\.is_admin\(\)\)/g)].length;
-  assert.equal(adminPolicyCount, 9, 'all admin table/storage policies should call public.is_admin()');
+  const adminPolicies = [
+    'admin_full_access_profiles',
+    'admin_full_access_clients',
+    'admin_full_access_maturity',
+    'admin_full_access_roadmap',
+    'admin_full_access_kpis',
+    'admin_full_access_documents',
+    'admin_full_access_tasks',
+    'admin_full_access_activity',
+    'admin_full_storage_access',
+  ];
+
+  for (const policy of adminPolicies) {
+    assert.match(
+      schema,
+      new RegExp(`CREATE POLICY ${policy} [\\s\\S]*?USING \\([^)]*public\\.is_admin\\(\\)[^)]*\\)`),
+      `${policy} should call public.is_admin()`,
+    );
+  }
 });
 
 test('documents storage bucket is provisioned by the schema', () => {
