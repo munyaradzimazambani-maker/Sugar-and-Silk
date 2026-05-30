@@ -27,10 +27,12 @@ import {
     X
 } from 'lucide-react';
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
 
-export default function AdminClientDetailPage({ params }: { params: { id: string } }) {
+export default function AdminClientDetailPage() {
+    const { id } = useParams<{ id: string }>();
     const supabase = createClient();
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'overview' | 'maturity' | 'kpis' | 'tasks' | 'documents' | 'roadmap'>('overview');
@@ -41,6 +43,7 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
     const [documents, setDocuments] = useState<any[]>([]);
     const [roadmapPhases, setRoadmapPhases] = useState<any[]>([]);
     const [uploading, setUploading] = useState(false);
+    const [uploadError, setUploadError] = useState<string | null>(null);
 
     // Modal states
     const [activeModal, setActiveModal] = useState<'maturity' | 'kpi' | 'task' | 'roadmap' | null>(null);
@@ -55,7 +58,7 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
             const { data: clientData } = await supabase
                 .from('clients')
                 .select('*')
-                .eq('id', params.id)
+                .eq('id', id)
                 .single();
 
             if (!clientData) {
@@ -72,11 +75,11 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
                 { data: documentsData },
                 { data: roadmapData }
             ] = await Promise.all([
-                supabase.from('maturity_scores').select('*').eq('client_id', params.id).order('dimension', { ascending: true }),
-                supabase.from('tasks').select('*').eq('client_id', params.id).order('due_date', { ascending: true }),
-                supabase.from('kpis').select('*').eq('client_id', params.id),
-                supabase.from('documents').select('*').eq('client_id', params.id).order('uploaded_at', { ascending: false }),
-                supabase.from('roadmap_phases').select('*').eq('client_id', params.id).order('phase_number', { ascending: true })
+                supabase.from('maturity_scores').select('*').eq('client_id', id).order('dimension', { ascending: true }),
+                supabase.from('tasks').select('*').eq('client_id', id).order('due_date', { ascending: true }),
+                supabase.from('kpis').select('*').eq('client_id', id),
+                supabase.from('documents').select('*').eq('client_id', id).order('uploaded_at', { ascending: false }),
+                supabase.from('roadmap_phases').select('*').eq('client_id', id).order('phase_number', { ascending: true })
             ]);
 
             setMaturityScores(maturityData || []);
@@ -87,7 +90,58 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
             setLoading(false);
         }
         fetchClientData();
-    }, [params.id]);
+    }, [id]);
+
+    async function handleDocumentUpload(e: React.ChangeEvent<HTMLInputElement>) {
+        const file = e.target.files?.[0];
+        if (!file || !client) return;
+
+        setUploading(true);
+        setUploadError(null);
+        const fileExt = file.name.split('.').pop();
+        const filePath = `${client.id}/${crypto.randomUUID()}.${fileExt}`;
+
+        const { error: uploadError } = await supabase.storage
+            .from('documents')
+            .upload(filePath, file);
+
+        if (uploadError) {
+            console.error('Error uploading file:', uploadError);
+            setUploadError('The file could not be uploaded. Please try again.');
+            setUploading(false);
+            e.target.value = '';
+            return;
+        }
+
+        const { error: dbError } = await supabase
+            .from('documents')
+            .insert({
+                client_id: client.id,
+                title: file.name,
+                file_url: filePath,
+                category: 'other',
+                uploaded_at: new Date().toISOString()
+            });
+
+        if (dbError) {
+            await supabase.storage.from('documents').remove([filePath]);
+            console.error('Error saving document record:', dbError);
+            setUploadError('The uploaded file could not be linked to this client. Please try again.');
+            setUploading(false);
+            e.target.value = '';
+            return;
+        }
+
+        const { data: updatedDocs } = await supabase
+            .from('documents')
+            .select('*')
+            .eq('client_id', client.id)
+            .order('uploaded_at', { ascending: false });
+
+        setDocuments(updatedDocs || []);
+        setUploading(false);
+        e.target.value = '';
+    }
 
     const tabs = [
         { id: 'overview', label: 'Overview', icon: Building2 },
@@ -530,50 +584,7 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
                                     type="file"
                                     id="file-upload"
                                     className="hidden"
-                                    onChange={async (e) => {
-                                        const file = e.target.files?.[0];
-                                        if (!file) return;
-
-                                        setUploading(true);
-                                        const fileExt = file.name.split('.').pop();
-                                        const filePath = `${client.id}/${Math.random()}.${fileExt}`;
-
-                                        // 1. Upload to Supabase Storage
-                                        const { error: uploadError } = await supabase.storage
-                                            .from('documents')
-                                            .upload(filePath, file);
-
-                                        if (uploadError) {
-                                            console.error('Error uploading file:', uploadError);
-                                            setUploading(false);
-                                            return;
-                                        }
-
-                                        // 2. Add record to documents table
-                                        const { error: dbError } = await supabase
-                                            .from('documents')
-                                            .insert({
-                                                client_id: client.id,
-                                                title: file.name,
-                                                file_url: filePath,
-                                                category: 'other',
-                                                uploaded_at: new Date().toISOString()
-                                            });
-
-                                        if (dbError) {
-                                            console.error('Error saving document record:', dbError);
-                                        }
-
-                                        // 3. Refresh list
-                                        const { data: updatedDocs } = await supabase
-                                            .from('documents')
-                                            .select('*')
-                                            .eq('client_id', client.id)
-                                            .order('uploaded_at', { ascending: false });
-
-                                        setDocuments(updatedDocs || []);
-                                        setUploading(false);
-                                    }}
+                                    onChange={handleDocumentUpload}
                                 />
                                 <label
                                     htmlFor="file-upload"
@@ -587,6 +598,9 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
                                 </label>
                             </div>
                         </div>
+                        {uploadError && (
+                            <p className="mb-6 text-sm font-medium text-red-400">{uploadError}</p>
+                        )}
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {documents.map((doc) => (
@@ -794,7 +808,7 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
                                         setIsSubmitting(true);
                                         if (activeModal === 'maturity') {
                                             const { data, error } = await supabase.from('maturity_scores').insert({
-                                                client_id: params.id,
+                                                client_id: id,
                                                 dimension: formData.dimension,
                                                 score: 1,
                                                 assessed_at: new Date().toISOString().split('T')[0]
@@ -802,7 +816,7 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
                                             if (data) setMaturityScores(prev => [...prev, data]);
                                         } else if (activeModal === 'kpi') {
                                             const { data, error } = await supabase.from('kpis').insert({
-                                                client_id: params.id,
+                                                client_id: id,
                                                 name: formData.name,
                                                 value: formData.value,
                                                 target: formData.target,
@@ -812,7 +826,7 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
                                             if (data) setKpis(prev => [...prev, data]);
                                         } else if (activeModal === 'task') {
                                             const { data, error } = await supabase.from('tasks').insert({
-                                                client_id: params.id,
+                                                client_id: id,
                                                 title: formData.title,
                                                 status: 'todo',
                                                 priority: formData.priority,
@@ -821,7 +835,7 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
                                             if (data) setTasks(prev => [...prev, data]);
                                         } else if (activeModal === 'roadmap') {
                                             const { data, error } = await supabase.from('roadmap_phases').insert({
-                                                client_id: params.id,
+                                                client_id: id,
                                                 title: formData.title,
                                                 phase_number: formData.phase_number,
                                                 status: 'not_started',
