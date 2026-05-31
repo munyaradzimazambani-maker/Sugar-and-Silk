@@ -48,7 +48,6 @@ export default function AdminClientListPage() {
     const [isCreating, setIsCreating] = useState(false);
 
     async function fetchClients() {
-        setLoading(true);
         const [
             { data: clientData, error: clientError },
             { data: profileData, error: profileError }
