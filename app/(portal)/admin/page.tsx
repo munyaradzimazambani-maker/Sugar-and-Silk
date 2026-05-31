@@ -24,9 +24,11 @@ export default function AdminClientListPage() {
     const supabase = createClient();
     const [loading, setLoading] = useState(true);
     const [clients, setClients] = useState<any[]>([]);
+    const [clientProfiles, setClientProfiles] = useState<any[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [newClient, setNewClient] = useState({
+        profile_id: '',
         company_name: '',
         industry: '',
         engagement_start: new Date().toISOString().split('T')[0]
@@ -35,14 +37,30 @@ export default function AdminClientListPage() {
 
     async function fetchClients() {
         setLoading(true);
-        const { data, error } = await supabase
-            .from('clients')
-            .select('*')
-            .order('company_name', { ascending: true });
+        const [
+            { data: clientData, error: clientError },
+            { data: profileData, error: profileError }
+        ] = await Promise.all([
+            supabase
+                .from('clients')
+                .select('*')
+                .order('company_name', { ascending: true }),
+            supabase
+                .from('profiles')
+                .select('id, full_name, company_name')
+                .eq('role', 'client')
+                .order('company_name', { ascending: true })
+        ]);
 
-        if (data) {
-            setClients(data);
+        if (clientError) {
+            console.error('Error fetching clients:', clientError);
         }
+        if (profileError) {
+            console.error('Error fetching client profiles:', profileError);
+        }
+
+        setClients(clientData || []);
+        setClientProfiles(profileData || []);
         setLoading(false);
     }
 
@@ -50,8 +68,22 @@ export default function AdminClientListPage() {
         fetchClients();
     }, []);
 
+    const linkedProfileIds = new Set(clients.map((client) => client.profile_id).filter(Boolean));
+    const availableClientProfiles = clientProfiles.filter((profile) =>
+        !linkedProfileIds.has(profile.id) || profile.id === newClient.profile_id
+    );
+
+    function resetNewClient() {
+        setNewClient({
+            profile_id: '',
+            company_name: '',
+            industry: '',
+            engagement_start: new Date().toISOString().split('T')[0]
+        });
+    }
+
     async function handleCreateClient() {
-        if (!newClient.company_name) return;
+        if (!newClient.profile_id || !newClient.company_name) return;
         setIsCreating(true);
 
         const { data, error } = await supabase
@@ -64,11 +96,7 @@ export default function AdminClientListPage() {
             console.error('Error creating client:', error);
         } else {
             setIsAddModalOpen(false);
-            setNewClient({
-                company_name: '',
-                industry: '',
-                engagement_start: new Date().toISOString().split('T')[0]
-            });
+            resetNewClient();
             fetchClients();
         }
         setIsCreating(false);
@@ -90,7 +118,7 @@ export default function AdminClientListPage() {
     }
 
     const filteredClients = clients.filter(c =>
-        c.company_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (c.company_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
         c.industry?.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
@@ -286,6 +314,34 @@ export default function AdminClientListPage() {
 
                             <div className="space-y-6">
                                 <div>
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Client Portal Profile</label>
+                                    <select
+                                        value={newClient.profile_id}
+                                        onChange={(e) => {
+                                            const selectedProfile = clientProfiles.find((profile) => profile.id === e.target.value);
+                                            setNewClient({
+                                                ...newClient,
+                                                profile_id: selectedProfile?.id || '',
+                                                company_name: selectedProfile?.company_name || selectedProfile?.full_name || ''
+                                            });
+                                        }}
+                                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                                    >
+                                        <option value="">Select an unlinked client profile</option>
+                                        {availableClientProfiles.map((profile) => (
+                                            <option key={profile.id} value={profile.id}>
+                                                {profile.company_name || profile.full_name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    {availableClientProfiles.length === 0 && (
+                                        <p className="mt-2 text-xs text-amber-400">
+                                            Create a client auth profile before opening a new engagement.
+                                        </p>
+                                    )}
+                                </div>
+
+                                <div>
                                     <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Company Name</label>
                                     <input
                                         type="text"
@@ -327,7 +383,7 @@ export default function AdminClientListPage() {
                                 </button>
                                 <button
                                     onClick={handleCreateClient}
-                                    disabled={isCreating || !newClient.company_name}
+                                    disabled={isCreating || !newClient.profile_id || !newClient.company_name}
                                     className="flex-[2] py-3 px-4 rounded-xl bg-indigo-600 text-white font-bold text-sm hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                 >
                                     {isCreating && <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />}
