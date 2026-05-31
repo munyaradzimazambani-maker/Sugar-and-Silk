@@ -5,13 +5,10 @@ import { motion } from 'framer-motion';
 import {
     Users,
     Search,
-    Filter,
     Plus,
     ArrowUpRight,
-    MoreHorizontal,
     Building2,
     Calendar,
-    ShieldCheck,
     ExternalLink,
     X,
     Trash2
@@ -20,11 +17,26 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
 
+type ClientRow = {
+    id: string;
+    profile_id: string;
+    company_name: string;
+    industry?: string | null;
+    engagement_start: string;
+    engagement_status: 'active' | 'paused' | 'completed';
+};
+
+type ClientProfile = {
+    id: string;
+    full_name: string;
+    company_name?: string | null;
+};
+
 export default function AdminClientListPage() {
     const supabase = createClient();
     const [loading, setLoading] = useState(true);
-    const [clients, setClients] = useState<any[]>([]);
-    const [clientProfiles, setClientProfiles] = useState<any[]>([]);
+    const [clients, setClients] = useState<ClientRow[]>([]);
+    const [clientProfiles, setClientProfiles] = useState<ClientProfile[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [newClient, setNewClient] = useState({
@@ -86,7 +98,7 @@ export default function AdminClientListPage() {
         if (!newClient.profile_id || !newClient.company_name) return;
         setIsCreating(true);
 
-        const { data, error } = await supabase
+        const { error } = await supabase
             .from('clients')
             .insert(newClient)
             .select()
