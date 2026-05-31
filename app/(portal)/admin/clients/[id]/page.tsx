@@ -32,8 +32,7 @@ import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
 
 export default function AdminClientDetailPage() {
-    const params = useParams<{ id: string }>();
-    const clientId = params.id;
+    const { id: clientId } = useParams<{ id: string }>();
     const supabase = createClient();
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'overview' | 'maturity' | 'kpis' | 'tasks' | 'documents' | 'roadmap'>('overview');
