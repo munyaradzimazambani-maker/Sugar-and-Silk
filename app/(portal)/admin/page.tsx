@@ -76,7 +76,41 @@ export default function AdminClientListPage() {
     }
 
     useEffect(() => {
-        fetchClients();
+        let isCancelled = false;
+
+        void Promise.all([
+            supabase
+                .from('clients')
+                .select('*')
+                .order('company_name', { ascending: true }),
+            supabase
+                .from('profiles')
+                .select('id, full_name, company_name')
+                .eq('role', 'client')
+                .order('company_name', { ascending: true })
+        ]).then(([clientResult, profileResult]) => {
+            if (isCancelled) return;
+
+            if (clientResult.error) {
+                console.error('Error fetching clients:', clientResult.error);
+            }
+            if (profileResult.error) {
+                console.error('Error fetching client profiles:', profileResult.error);
+            }
+
+            setClients(clientResult.data || []);
+            setClientProfiles(profileResult.data || []);
+            setLoading(false);
+        }).catch((error) => {
+            if (!isCancelled) {
+                console.error('Error fetching admin data:', error);
+                setLoading(false);
+            }
+        });
+
+        return () => {
+            isCancelled = true;
+        };
     }, []);
 
     const linkedProfileIds = new Set(clients.map((client) => client.profile_id).filter(Boolean));
