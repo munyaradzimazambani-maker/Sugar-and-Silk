@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ChangeEvent } from 'react';
 import { motion } from 'framer-motion';
 import {
     Building2,
@@ -27,10 +27,12 @@ import {
     X
 } from 'lucide-react';
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
 
-export default function AdminClientDetailPage({ params }: { params: { id: string } }) {
+export default function AdminClientDetailPage() {
+    const { id: clientId } = useParams<{ id: string }>();
     const supabase = createClient();
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'overview' | 'maturity' | 'kpis' | 'tasks' | 'documents' | 'roadmap'>('overview');
@@ -41,11 +43,73 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
     const [documents, setDocuments] = useState<any[]>([]);
     const [roadmapPhases, setRoadmapPhases] = useState<any[]>([]);
     const [uploading, setUploading] = useState(false);
+    const [uploadError, setUploadError] = useState<string | null>(null);
 
     // Modal states
     const [activeModal, setActiveModal] = useState<'maturity' | 'kpi' | 'task' | 'roadmap' | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [formData, setFormData] = useState<any>({});
+
+    async function refreshDocuments() {
+        const { data: updatedDocs } = await supabase
+            .from('documents')
+            .select('*')
+            .eq('client_id', clientId)
+            .order('uploaded_at', { ascending: false });
+
+        setDocuments(updatedDocs || []);
+    }
+
+    async function handleDocumentUpload(e: ChangeEvent<HTMLInputElement>) {
+        const file = e.target.files?.[0];
+        if (!file || !client) return;
+
+        setUploading(true);
+        setUploadError(null);
+
+        const fileExt = file.name.split('.').pop()?.replace(/[^a-zA-Z0-9]/g, '') || 'bin';
+        const filePath = `${client.id}/${crypto.randomUUID()}.${fileExt}`;
+
+        try {
+            const { error: storageError } = await supabase.storage
+                .from('documents')
+                .upload(filePath, file);
+
+            if (storageError) {
+                console.error('Error uploading file:', storageError);
+                setUploadError('Upload failed before the file could be saved.');
+                return;
+            }
+
+            const { error: dbError } = await supabase
+                .from('documents')
+                .insert({
+                    client_id: client.id,
+                    title: file.name,
+                    file_url: filePath,
+                    category: 'other',
+                    uploaded_at: new Date().toISOString()
+                });
+
+            if (dbError) {
+                const { error: rollbackError } = await supabase.storage
+                    .from('documents')
+                    .remove([filePath]);
+
+                console.error('Error saving document record:', dbError);
+                if (rollbackError) {
+                    console.error('Error rolling back uploaded file:', rollbackError);
+                }
+                setUploadError('Upload could not be saved. Please retry.');
+                return;
+            }
+
+            await refreshDocuments();
+        } finally {
+            setUploading(false);
+            e.target.value = '';
+        }
+    }
 
     useEffect(() => {
         async function fetchClientData() {
@@ -55,7 +119,7 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
             const { data: clientData } = await supabase
                 .from('clients')
                 .select('*')
-                .eq('id', params.id)
+                .eq('id', clientId)
                 .single();
 
             if (!clientData) {
@@ -72,11 +136,11 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
                 { data: documentsData },
                 { data: roadmapData }
             ] = await Promise.all([
-                supabase.from('maturity_scores').select('*').eq('client_id', params.id).order('dimension', { ascending: true }),
-                supabase.from('tasks').select('*').eq('client_id', params.id).order('due_date', { ascending: true }),
-                supabase.from('kpis').select('*').eq('client_id', params.id),
-                supabase.from('documents').select('*').eq('client_id', params.id).order('uploaded_at', { ascending: false }),
-                supabase.from('roadmap_phases').select('*').eq('client_id', params.id).order('phase_number', { ascending: true })
+                supabase.from('maturity_scores').select('*').eq('client_id', clientId).order('dimension', { ascending: true }),
+                supabase.from('tasks').select('*').eq('client_id', clientId).order('due_date', { ascending: true }),
+                supabase.from('kpis').select('*').eq('client_id', clientId),
+                supabase.from('documents').select('*').eq('client_id', clientId).order('uploaded_at', { ascending: false }),
+                supabase.from('roadmap_phases').select('*').eq('client_id', clientId).order('phase_number', { ascending: true })
             ]);
 
             setMaturityScores(maturityData || []);
@@ -87,7 +151,7 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
             setLoading(false);
         }
         fetchClientData();
-    }, [params.id]);
+    }, [clientId]);
 
     const tabs = [
         { id: 'overview', label: 'Overview', icon: Building2 },
@@ -530,50 +594,8 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
                                     type="file"
                                     id="file-upload"
                                     className="hidden"
-                                    onChange={async (e) => {
-                                        const file = e.target.files?.[0];
-                                        if (!file) return;
-
-                                        setUploading(true);
-                                        const fileExt = file.name.split('.').pop();
-                                        const filePath = `${client.id}/${Math.random()}.${fileExt}`;
-
-                                        // 1. Upload to Supabase Storage
-                                        const { error: uploadError } = await supabase.storage
-                                            .from('documents')
-                                            .upload(filePath, file);
-
-                                        if (uploadError) {
-                                            console.error('Error uploading file:', uploadError);
-                                            setUploading(false);
-                                            return;
-                                        }
-
-                                        // 2. Add record to documents table
-                                        const { error: dbError } = await supabase
-                                            .from('documents')
-                                            .insert({
-                                                client_id: client.id,
-                                                title: file.name,
-                                                file_url: filePath,
-                                                category: 'other',
-                                                uploaded_at: new Date().toISOString()
-                                            });
-
-                                        if (dbError) {
-                                            console.error('Error saving document record:', dbError);
-                                        }
-
-                                        // 3. Refresh list
-                                        const { data: updatedDocs } = await supabase
-                                            .from('documents')
-                                            .select('*')
-                                            .eq('client_id', client.id)
-                                            .order('uploaded_at', { ascending: false });
-
-                                        setDocuments(updatedDocs || []);
-                                        setUploading(false);
-                                    }}
+                                    disabled={uploading}
+                                    onChange={handleDocumentUpload}
                                 />
                                 <label
                                     htmlFor="file-upload"
@@ -585,6 +607,11 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
                                     {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
                                     {uploading ? 'Uploading...' : 'Upload Asset'}
                                 </label>
+                                {uploadError && (
+                                    <p className="absolute right-0 top-12 w-64 text-xs font-medium text-red-400 text-right">
+                                        {uploadError}
+                                    </p>
+                                )}
                             </div>
                         </div>
 
@@ -794,7 +821,7 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
                                         setIsSubmitting(true);
                                         if (activeModal === 'maturity') {
                                             const { data, error } = await supabase.from('maturity_scores').insert({
-                                                client_id: params.id,
+                                                client_id: clientId,
                                                 dimension: formData.dimension,
                                                 score: 1,
                                                 assessed_at: new Date().toISOString().split('T')[0]
@@ -802,7 +829,7 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
                                             if (data) setMaturityScores(prev => [...prev, data]);
                                         } else if (activeModal === 'kpi') {
                                             const { data, error } = await supabase.from('kpis').insert({
-                                                client_id: params.id,
+                                                client_id: clientId,
                                                 name: formData.name,
                                                 value: formData.value,
                                                 target: formData.target,
@@ -812,7 +839,7 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
                                             if (data) setKpis(prev => [...prev, data]);
                                         } else if (activeModal === 'task') {
                                             const { data, error } = await supabase.from('tasks').insert({
-                                                client_id: params.id,
+                                                client_id: clientId,
                                                 title: formData.title,
                                                 status: 'todo',
                                                 priority: formData.priority,
@@ -821,7 +848,7 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
                                             if (data) setTasks(prev => [...prev, data]);
                                         } else if (activeModal === 'roadmap') {
                                             const { data, error } = await supabase.from('roadmap_phases').insert({
-                                                client_id: params.id,
+                                                client_id: clientId,
                                                 title: formData.title,
                                                 phase_number: formData.phase_number,
                                                 status: 'not_started',
