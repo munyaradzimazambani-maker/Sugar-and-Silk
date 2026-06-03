@@ -5,13 +5,10 @@ import { motion } from 'framer-motion';
 import {
     Users,
     Search,
-    Filter,
     Plus,
     ArrowUpRight,
-    MoreHorizontal,
     Building2,
     Calendar,
-    ShieldCheck,
     ExternalLink,
     X,
     Trash2
@@ -20,29 +17,82 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
 
+type ClientProfile = {
+    id: string;
+    full_name: string;
+    company_name: string | null;
+};
+
+type ClientWithProfile = {
+    id: string;
+    profile_id: string;
+    industry: string | null;
+    engagement_start: string;
+    engagement_status: 'active' | 'paused' | 'completed';
+    profiles: ClientProfile | ClientProfile[] | null;
+    company_name?: string;
+    contact_name?: string;
+};
+
+function defaultNewClient() {
+    return {
+        profile_id: '',
+        industry: '',
+        engagement_start: new Date().toISOString().split('T')[0]
+    };
+}
+
+function normalizeClient(client: ClientWithProfile) {
+    const profile = Array.isArray(client.profiles) ? client.profiles[0] : client.profiles;
+    return {
+        ...client,
+        profiles: profile,
+        company_name: profile?.company_name || profile?.full_name || 'Unnamed Client',
+        contact_name: profile?.full_name || 'Client profile'
+    };
+}
+
 export default function AdminClientListPage() {
     const supabase = createClient();
     const [loading, setLoading] = useState(true);
     const [clients, setClients] = useState<any[]>([]);
+    const [availableProfiles, setAvailableProfiles] = useState<ClientProfile[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-    const [newClient, setNewClient] = useState({
-        company_name: '',
-        industry: '',
-        engagement_start: new Date().toISOString().split('T')[0]
-    });
+    const [newClient, setNewClient] = useState(defaultNewClient);
     const [isCreating, setIsCreating] = useState(false);
 
     async function fetchClients() {
         setLoading(true);
-        const { data, error } = await supabase
-            .from('clients')
-            .select('*')
-            .order('company_name', { ascending: true });
+        const [
+            { data: clientData, error: clientError },
+            { data: profileData, error: profileError }
+        ] = await Promise.all([
+            supabase
+                .from('clients')
+                .select('*, profiles(id, full_name, company_name)')
+                .order('engagement_start', { ascending: false }),
+            supabase
+                .from('profiles')
+                .select('id, full_name, company_name')
+                .eq('role', 'client')
+                .order('company_name', { ascending: true })
+        ]);
 
-        if (data) {
-            setClients(data);
-        }
+        if (clientError) console.error('Error loading clients:', clientError);
+        if (profileError) console.error('Error loading client profiles:', profileError);
+
+        const normalizedClients = (clientData || [])
+            .map((client) => normalizeClient(client as ClientWithProfile))
+            .sort((a, b) => a.company_name.localeCompare(b.company_name));
+
+        const linkedProfileIds = new Set(normalizedClients.map((client) => client.profile_id));
+        const unlinkedProfiles = (profileData || [])
+            .filter((profile) => !linkedProfileIds.has(profile.id))
+            .sort((a, b) => (a.company_name || a.full_name).localeCompare(b.company_name || b.full_name));
+
+        setClients(normalizedClients);
+        setAvailableProfiles(unlinkedProfiles);
         setLoading(false);
     }
 
@@ -51,24 +101,24 @@ export default function AdminClientListPage() {
     }, []);
 
     async function handleCreateClient() {
-        if (!newClient.company_name) return;
+        if (!newClient.profile_id) return;
         setIsCreating(true);
 
-        const { data, error } = await supabase
+        const { error } = await supabase
             .from('clients')
-            .insert(newClient)
-            .select()
+            .insert({
+                profile_id: newClient.profile_id,
+                industry: newClient.industry || null,
+                engagement_start: newClient.engagement_start
+            })
+            .select('*, profiles(id, full_name, company_name)')
             .single();
 
         if (error) {
             console.error('Error creating client:', error);
         } else {
             setIsAddModalOpen(false);
-            setNewClient({
-                company_name: '',
-                industry: '',
-                engagement_start: new Date().toISOString().split('T')[0]
-            });
+            setNewClient(defaultNewClient());
             fetchClients();
         }
         setIsCreating(false);
@@ -90,7 +140,7 @@ export default function AdminClientListPage() {
     }
 
     const filteredClients = clients.filter(c =>
-        c.company_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (c.company_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
         c.industry?.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
@@ -181,7 +231,7 @@ export default function AdminClientListPage() {
                                         </div>
                                         <div>
                                             <p className="text-sm font-bold text-white group-hover:text-indigo-400 transition-colors">{client.company_name}</p>
-                                            <p className="text-xs text-slate-500 mt-0.5 font-medium">PCM Strategic Consulting</p>
+                                            <p className="text-xs text-slate-500 mt-0.5 font-medium">{client.contact_name}</p>
                                         </div>
                                     </div>
                                 </td>
@@ -286,14 +336,22 @@ export default function AdminClientListPage() {
 
                             <div className="space-y-6">
                                 <div>
-                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Company Name</label>
-                                    <input
-                                        type="text"
-                                        placeholder="e.g. Acme Digital"
-                                        value={newClient.company_name}
-                                        onChange={(e) => setNewClient({ ...newClient, company_name: e.target.value })}
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Client Profile</label>
+                                    <select
+                                        value={newClient.profile_id}
+                                        onChange={(e) => setNewClient({ ...newClient, profile_id: e.target.value })}
                                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
-                                    />
+                                    >
+                                        <option value="">Select an existing client profile...</option>
+                                        {availableProfiles.map((profile) => (
+                                            <option key={profile.id} value={profile.id}>
+                                                {profile.company_name || profile.full_name} ({profile.full_name})
+                                            </option>
+                                        ))}
+                                    </select>
+                                    {availableProfiles.length === 0 && (
+                                        <p className="text-xs text-slate-500 mt-2">No unlinked client profiles are available.</p>
+                                    )}
                                 </div>
 
                                 <div>
@@ -327,7 +385,7 @@ export default function AdminClientListPage() {
                                 </button>
                                 <button
                                     onClick={handleCreateClient}
-                                    disabled={isCreating || !newClient.company_name}
+                                    disabled={isCreating || !newClient.profile_id}
                                     className="flex-[2] py-3 px-4 rounded-xl bg-indigo-600 text-white font-bold text-sm hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                 >
                                     {isCreating && <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />}
