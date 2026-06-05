@@ -41,6 +41,7 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
     const [documents, setDocuments] = useState<any[]>([]);
     const [roadmapPhases, setRoadmapPhases] = useState<any[]>([]);
     const [uploading, setUploading] = useState(false);
+    const [uploadError, setUploadError] = useState<string | null>(null);
 
     // Modal states
     const [activeModal, setActiveModal] = useState<'maturity' | 'kpi' | 'task' | 'roadmap' | null>(null);
@@ -535,8 +536,10 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
                                         if (!file) return;
 
                                         setUploading(true);
+                                        setUploadError(null);
                                         const fileExt = file.name.split('.').pop();
-                                        const filePath = `${client.id}/${Math.random()}.${fileExt}`;
+                                        const fileId = crypto.randomUUID();
+                                        const filePath = `${client.id}/${fileId}.${fileExt}`;
 
                                         // 1. Upload to Supabase Storage
                                         const { error: uploadError } = await supabase.storage
@@ -562,6 +565,18 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
 
                                         if (dbError) {
                                             console.error('Error saving document record:', dbError);
+                                            const { error: removeError } = await supabase.storage
+                                                .from('documents')
+                                                .remove([filePath]);
+
+                                            if (removeError) {
+                                                console.error('Error rolling back uploaded file:', removeError);
+                                            }
+
+                                            setUploadError('Upload failed while saving the document record. Please try again.');
+                                            setUploading(false);
+                                            e.target.value = '';
+                                            return;
                                         }
 
                                         // 3. Refresh list
@@ -573,6 +588,7 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
 
                                         setDocuments(updatedDocs || []);
                                         setUploading(false);
+                                        e.target.value = '';
                                     }}
                                 />
                                 <label
@@ -585,6 +601,11 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
                                     {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
                                     {uploading ? 'Uploading...' : 'Upload Asset'}
                                 </label>
+                                {uploadError && (
+                                    <p className="absolute right-0 mt-2 w-64 text-xs text-red-400 text-right">
+                                        {uploadError}
+                                    </p>
+                                )}
                             </div>
                         </div>
 
