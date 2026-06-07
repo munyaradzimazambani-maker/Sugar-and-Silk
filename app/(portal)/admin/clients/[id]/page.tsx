@@ -560,7 +560,7 @@ export default function AdminClientDetailPage() {
                                     </div>
 
                                     <div className="flex items-center gap-3">
-                                        {['not_started', 'in_progress', 'completed'].map((status) => (
+                                        {(['not_started', 'in_progress', 'completed'] as const).map((status) => (
                                             <button
                                                 key={status}
                                                 onClick={async () => {
