@@ -5,7 +5,7 @@ CREATE TABLE profiles (
   id UUID REFERENCES auth.users ON DELETE CASCADE PRIMARY KEY,
   full_name TEXT NOT NULL,
   company_name TEXT,
-  role TEXT CHECK (role IN ('admin', 'client')) DEFAULT 'client',
+  role TEXT NOT NULL CHECK (role IN ('admin', 'client')) DEFAULT 'client',
   avatar_url TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -14,7 +14,7 @@ CREATE TABLE profiles (
 -- 2. Client Engagements
 CREATE TABLE clients (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  profile_id UUID REFERENCES profiles(id),
+  profile_id UUID NOT NULL UNIQUE REFERENCES profiles(id) ON DELETE CASCADE,
   industry TEXT,
   engagement_start DATE DEFAULT CURRENT_DATE,
   engagement_status TEXT CHECK (engagement_status IN ('active', 'paused', 'completed')) DEFAULT 'active',
@@ -25,7 +25,7 @@ CREATE TABLE clients (
 -- 3. Maturity Scores
 CREATE TABLE maturity_scores (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
+  client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
   dimension TEXT NOT NULL,
   score INTEGER CHECK (score >= 1 AND score <= 5),
   assessed_at DATE DEFAULT CURRENT_DATE,
@@ -36,7 +36,7 @@ CREATE TABLE maturity_scores (
 -- 4. Strategy Roadmap Phases
 CREATE TABLE roadmap_phases (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
+  client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
   phase_number INTEGER NOT NULL,
   title TEXT NOT NULL,
   description TEXT,
@@ -49,7 +49,7 @@ CREATE TABLE roadmap_phases (
 -- 5. Key Performance Indicators (KPIs)
 CREATE TABLE kpis (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
+  client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
   category TEXT CHECK (category IN ('marketing', 'sales', 'financial')),
   name TEXT NOT NULL,
   value NUMERIC NOT NULL,
@@ -62,7 +62,7 @@ CREATE TABLE kpis (
 -- 6. Documents
 CREATE TABLE documents (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
+  client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
   description TEXT,
   file_url TEXT NOT NULL,
@@ -73,7 +73,7 @@ CREATE TABLE documents (
 -- 7. Tasks
 CREATE TABLE tasks (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
+  client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
   description TEXT,
   status TEXT CHECK (status IN ('todo', 'in_progress', 'done')) DEFAULT 'todo',
@@ -86,7 +86,7 @@ CREATE TABLE tasks (
 -- 8. Activity Log
 CREATE TABLE activity_log (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
+  client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
   type TEXT CHECK (type IN ('meeting', 'note', 'milestone', 'update')),
   title TEXT NOT NULL,
   body TEXT,
@@ -96,6 +96,22 @@ CREATE TABLE activity_log (
 );
 
 -- ROW LEVEL SECURITY (RLS) POLICIES ---
+
+-- Admin privileges are owned by public.profiles.role. Supabase's JWT "role"
+-- claim is the Postgres role (usually "authenticated"), not this app role.
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.profiles
+    WHERE id = auth.uid()
+      AND role = 'admin'
+  );
+$$;
 
 -- Enable RLS on all tables
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
@@ -109,65 +125,80 @@ ALTER TABLE activity_log ENABLE ROW LEVEL SECURITY;
 
 -- 1. Profiles
 CREATE POLICY admin_full_access_profiles ON profiles FOR ALL TO authenticated 
-USING (auth.jwt() ->> 'role' = 'admin');
+USING (public.is_admin())
+WITH CHECK (public.is_admin());
 
 CREATE POLICY client_read_own_profile ON profiles FOR SELECT TO authenticated 
 USING (auth.uid() = id);
 
 -- 2. Clients
 CREATE POLICY admin_full_access_clients ON clients FOR ALL TO authenticated 
-USING (auth.jwt() ->> 'role' = 'admin');
+USING (public.is_admin())
+WITH CHECK (public.is_admin());
 
 CREATE POLICY client_read_own_engagement ON clients FOR SELECT TO authenticated 
 USING (profile_id = auth.uid());
 
 -- 3. Maturity Scores
 CREATE POLICY admin_full_access_maturity ON maturity_scores FOR ALL TO authenticated 
-USING (auth.jwt() ->> 'role' = 'admin');
+USING (public.is_admin())
+WITH CHECK (public.is_admin());
 
 CREATE POLICY client_read_own_maturity ON maturity_scores FOR SELECT TO authenticated 
 USING (client_id IN (SELECT id FROM clients WHERE profile_id = auth.uid()));
 
 -- 4. Roadmap Phases
 CREATE POLICY admin_full_access_roadmap ON roadmap_phases FOR ALL TO authenticated 
-USING (auth.jwt() ->> 'role' = 'admin');
+USING (public.is_admin())
+WITH CHECK (public.is_admin());
 
 CREATE POLICY client_read_own_roadmap ON roadmap_phases FOR SELECT TO authenticated 
 USING (client_id IN (SELECT id FROM clients WHERE profile_id = auth.uid()));
 
 -- 5. KPIs
 CREATE POLICY admin_full_access_kpis ON kpis FOR ALL TO authenticated 
-USING (auth.jwt() ->> 'role' = 'admin');
+USING (public.is_admin())
+WITH CHECK (public.is_admin());
 
 CREATE POLICY client_read_own_kpis ON kpis FOR SELECT TO authenticated 
 USING (client_id IN (SELECT id FROM clients WHERE profile_id = auth.uid()));
 
 -- 6. Documents
 CREATE POLICY admin_full_access_documents ON documents FOR ALL TO authenticated 
-USING (auth.jwt() ->> 'role' = 'admin');
+USING (public.is_admin())
+WITH CHECK (public.is_admin());
 
 CREATE POLICY client_read_own_documents ON documents FOR SELECT TO authenticated 
 USING (client_id IN (SELECT id FROM clients WHERE profile_id = auth.uid()));
 
 -- 7. Tasks
 CREATE POLICY admin_full_access_tasks ON tasks FOR ALL TO authenticated 
-USING (auth.jwt() ->> 'role' = 'admin');
+USING (public.is_admin())
+WITH CHECK (public.is_admin());
 
 CREATE POLICY client_read_own_tasks ON tasks FOR SELECT TO authenticated 
 USING (client_id IN (SELECT id FROM clients WHERE profile_id = auth.uid()));
 
 -- 8. Activity Log
 CREATE POLICY admin_full_access_activity ON activity_log FOR ALL TO authenticated 
-USING (auth.jwt() ->> 'role' = 'admin');
+USING (public.is_admin())
+WITH CHECK (public.is_admin());
 
 CREATE POLICY client_read_own_activity ON activity_log FOR SELECT TO authenticated 
 USING (client_id IN (SELECT id FROM clients WHERE profile_id = auth.uid()));
 
 -- STORAGE POLICIES (for 'documents' bucket) --
 
+-- Keep strategic documents private; access should go through signed URLs
+-- protected by storage.objects RLS.
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('documents', 'documents', false)
+ON CONFLICT (id) DO UPDATE SET public = false;
+
 -- Allow admins full access to all storage objects
 CREATE POLICY admin_full_storage_access ON storage.objects FOR ALL TO authenticated
-USING (bucket_id = 'documents' AND (auth.jwt() ->> 'role' = 'admin'));
+USING (bucket_id = 'documents' AND public.is_admin())
+WITH CHECK (bucket_id = 'documents' AND public.is_admin());
 
 -- Allow clients to view/download their own documents
 -- (Note: We use signed URLs in the app, but this adds a second layer of security)
