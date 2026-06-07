@@ -45,6 +45,58 @@ type ClientRow = {
     profiles?: ClientProfile | ClientProfile[] | null;
 };
 
+type ActiveTab = 'overview' | 'maturity' | 'kpis' | 'tasks' | 'documents' | 'roadmap';
+type ActiveModal = 'maturity' | 'kpi' | 'task' | 'roadmap';
+
+type MaturityScore = {
+    id: string;
+    dimension: string;
+    score: number;
+};
+
+type TaskRow = {
+    id: string;
+    title: string;
+    status: 'todo' | 'in_progress' | 'done';
+    priority: 'low' | 'medium' | 'high';
+    due_date: string;
+};
+
+type KpiRow = {
+    id: string;
+    category: 'marketing' | 'sales' | 'financial';
+    name: string;
+    value: number;
+    target: number | null;
+};
+
+type DocumentRow = {
+    id: string;
+    title: string;
+    file_url: string;
+    uploaded_at: string;
+};
+
+type RoadmapPhase = {
+    id: string;
+    phase_number: number;
+    title: string;
+    status: 'not_started' | 'in_progress' | 'completed';
+    start_date: string;
+    end_date: string;
+};
+
+type ModalFormData = {
+    dimension?: string;
+    name?: string;
+    value?: number;
+    target?: number;
+    category?: 'marketing' | 'sales' | 'financial';
+    title?: string;
+    priority?: 'low' | 'medium' | 'high';
+    phase_number?: number;
+};
+
 function getClientProfile(client: ClientRow): ClientProfile | null {
     return Array.isArray(client.profiles) ? client.profiles[0] ?? null : client.profiles ?? null;
 }
@@ -59,20 +111,20 @@ export default function AdminClientDetailPage() {
     const clientId = params.id;
     const supabase = createClient();
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'overview' | 'maturity' | 'kpis' | 'tasks' | 'documents' | 'roadmap'>('overview');
+    const [activeTab, setActiveTab] = useState<ActiveTab>('overview');
     const [client, setClient] = useState<ClientRow | null>(null);
-    const [maturityScores, setMaturityScores] = useState<any[]>([]);
-    const [tasks, setTasks] = useState<any[]>([]);
-    const [kpis, setKpis] = useState<any[]>([]);
-    const [documents, setDocuments] = useState<any[]>([]);
-    const [roadmapPhases, setRoadmapPhases] = useState<any[]>([]);
+    const [maturityScores, setMaturityScores] = useState<MaturityScore[]>([]);
+    const [tasks, setTasks] = useState<TaskRow[]>([]);
+    const [kpis, setKpis] = useState<KpiRow[]>([]);
+    const [documents, setDocuments] = useState<DocumentRow[]>([]);
+    const [roadmapPhases, setRoadmapPhases] = useState<RoadmapPhase[]>([]);
     const [uploading, setUploading] = useState(false);
     const [uploadError, setUploadError] = useState('');
 
     // Modal states
-    const [activeModal, setActiveModal] = useState<'maturity' | 'kpi' | 'task' | 'roadmap' | null>(null);
+    const [activeModal, setActiveModal] = useState<ActiveModal | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [formData, setFormData] = useState<any>({});
+    const [formData, setFormData] = useState<ModalFormData>({});
 
     useEffect(() => {
         async function fetchClientData() {
@@ -174,7 +226,7 @@ export default function AdminClientDetailPage() {
         setUploading(false);
     }
 
-    const tabs = [
+    const tabs: { id: ActiveTab; label: string; icon: typeof Building2 }[] = [
         { id: 'overview', label: 'Overview', icon: Building2 },
         { id: 'maturity', label: 'Maturity', icon: ShieldCheck },
         { id: 'kpis', label: 'KPIs', icon: Target },
@@ -267,7 +319,7 @@ export default function AdminClientDetailPage() {
                 {tabs.map((tab) => (
                     <button
                         key={tab.id}
-                        onClick={() => setActiveTab(tab.id as any)}
+                        onClick={() => setActiveTab(tab.id)}
                         className={cn(
                             "flex items-center gap-2 pb-4 text-sm font-bold uppercase tracking-widest transition-all relative",
                             activeTab === tab.id ? "text-indigo-400" : "text-slate-500 hover:text-slate-300"
@@ -338,7 +390,7 @@ export default function AdminClientDetailPage() {
                                 <h4 className="text-sm font-bold text-white uppercase tracking-widest mb-6 text-slate-500">Internal Audit Logs</h4>
                                 <div className="space-y-4">
                                     <div className="p-4 rounded-xl bg-slate-950 border border-slate-800">
-                                        <p className="text-xs text-slate-400 leading-relaxed italic">"Initial data suggests {clientCompanyName} has high potential for automation roi. CEO and COO are aligned on the transition."</p>
+                                        <p className="text-xs text-slate-400 leading-relaxed italic">&quot;Initial data suggests {clientCompanyName} has high potential for automation roi. CEO and COO are aligned on the transition.&quot;</p>
                                         <div className="mt-3 flex items-center justify-between">
                                             <span className="text-[10px] text-slate-600 uppercase font-bold tracking-tight">Automated Log • By PCM System</span>
                                         </div>

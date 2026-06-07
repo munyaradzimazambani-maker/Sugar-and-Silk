@@ -100,7 +100,10 @@ export default function AdminClientListPage() {
     }
 
     useEffect(() => {
+        // Initial data load for this client-only admin screen.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         fetchClients();
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         fetchAvailableProfiles();
     }, []);
 
@@ -109,13 +112,13 @@ export default function AdminClientListPage() {
         setIsCreating(true);
         setFormError('');
 
-        const { data, error } = await supabase
+        const { error } = await supabase
             .from('clients')
             .insert({
                 profile_id: selectedProfileId,
                 ...newClient
             })
-            .select('*, profiles:profile_id(full_name, company_name)')
+            .select('id')
             .single();
 
         if (error) {
