@@ -103,7 +103,6 @@ export default function AdminClientListPage() {
         // Initial data load for this client-only admin screen.
         // eslint-disable-next-line react-hooks/set-state-in-effect
         fetchClients();
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         fetchAvailableProfiles();
     }, []);
 
