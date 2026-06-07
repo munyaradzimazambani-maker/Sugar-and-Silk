@@ -13,19 +13,55 @@ import {
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
 
+type ProfileRow = {
+    full_name: string | null;
+    company_name: string | null;
+};
+
+type ClientRow = {
+    id: string;
+};
+
+type MaturityScoreRow = {
+    score: number;
+};
+
+type RoadmapPhaseRow = {
+    id: string;
+    phase_number: number;
+    title: string;
+    description: string | null;
+    status: 'not_started' | 'in_progress' | 'completed';
+};
+
+type ActivityLogRow = {
+    id: string;
+    type: 'meeting' | 'note' | 'milestone' | 'update';
+    title: string;
+    body: string | null;
+    occurred_at: string;
+};
+
+type KpiRow = {
+    id: string;
+    name: string;
+    value: number;
+    target: number | null;
+    unit: string | null;
+};
+
 export default function DashboardPage() {
     const supabase = createClient();
     const [loading, setLoading] = useState(true);
-    const [profile, setProfile] = useState<any>(null);
-    const [client, setClient] = useState<any>(null);
+    const [profile, setProfile] = useState<ProfileRow | null>(null);
     const [stats, setStats] = useState({
         avgMaturity: 0,
         activeTasks: 0,
         docCount: 0,
     });
-    const [roadmap, setRoadmap] = useState<any[]>([]);
-    const [activity, setActivity] = useState<any[]>([]);
-    const [kpis, setKpis] = useState<any[]>([]);
+    const [roadmap, setRoadmap] = useState<RoadmapPhaseRow[]>([]);
+    const [activity, setActivity] = useState<ActivityLogRow[]>([]);
+    const [kpis, setKpis] = useState<KpiRow[]>([]);
 
     useEffect(() => {
         async function fetchDashboardData() {
@@ -53,7 +89,7 @@ export default function DashboardPage() {
                 setLoading(false);
                 return;
             }
-            setClient(clientData);
+            const client = clientData as ClientRow;
 
             // 3. Parallel fetching for stats and details
             const [
@@ -64,16 +100,17 @@ export default function DashboardPage() {
                 { data: activityData },
                 { data: kpiData }
             ] = await Promise.all([
-                supabase.from('maturity_scores').select('score').eq('client_id', clientData.id),
-                supabase.from('tasks').select('*', { count: 'exact', head: true }).eq('client_id', clientData.id).neq('status', 'done'),
-                supabase.from('documents').select('*', { count: 'exact', head: true }).eq('client_id', clientData.id),
-                supabase.from('roadmap_phases').select('*').eq('client_id', clientData.id).order('phase_number', { ascending: true }),
-                supabase.from('activity_log').select('*').eq('client_id', clientData.id).order('occurred_at', { ascending: false }).limit(5),
-                supabase.from('kpis').select('*').eq('client_id', clientData.id).limit(4)
+                supabase.from('maturity_scores').select('score').eq('client_id', client.id),
+                supabase.from('tasks').select('*', { count: 'exact', head: true }).eq('client_id', client.id).neq('status', 'done'),
+                supabase.from('documents').select('*', { count: 'exact', head: true }).eq('client_id', client.id),
+                supabase.from('roadmap_phases').select('*').eq('client_id', client.id).order('phase_number', { ascending: true }),
+                supabase.from('activity_log').select('*').eq('client_id', client.id).order('occurred_at', { ascending: false }).limit(5),
+                supabase.from('kpis').select('*').eq('client_id', client.id).limit(4)
             ]);
 
-            const avgMaturity = maturityData?.length
-                ? Math.round(maturityData.reduce((acc, curr) => acc + curr.score, 0) / maturityData.length)
+            const scores = (maturityData || []) as MaturityScoreRow[];
+            const avgMaturity = scores.length
+                ? Math.round(scores.reduce((acc, curr) => acc + curr.score, 0) / scores.length)
                 : 0;
 
             setStats({
@@ -81,9 +118,9 @@ export default function DashboardPage() {
                 activeTasks: tasksCount || 0,
                 docCount: docsCount || 0
             });
-            setRoadmap(roadmapData || []);
-            setActivity(activityData || []);
-            setKpis(kpiData || []);
+            setRoadmap((roadmapData || []) as RoadmapPhaseRow[]);
+            setActivity((activityData || []) as ActivityLogRow[]);
+            setKpis((kpiData || []) as KpiRow[]);
             setLoading(false);
         }
 
