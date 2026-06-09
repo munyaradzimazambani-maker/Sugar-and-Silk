@@ -20,56 +20,119 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
 
+type ClientProfile = {
+    full_name: string;
+    company_name: string | null;
+};
+
+type ClientRow = {
+    id: string;
+    profile_id: string;
+    industry: string | null;
+    engagement_start: string;
+    engagement_status: string;
+    profiles?: ClientProfile | ClientProfile[] | null;
+};
+
+type AvailableProfile = ClientProfile & {
+    id: string;
+};
+
+function getClientProfile(client: ClientRow): ClientProfile | null {
+    return Array.isArray(client.profiles) ? client.profiles[0] ?? null : client.profiles ?? null;
+}
+
+function getClientCompanyName(client: ClientRow): string {
+    const profile = getClientProfile(client);
+    return profile?.company_name || profile?.full_name || 'Unnamed client';
+}
+
 export default function AdminClientListPage() {
     const supabase = createClient();
     const [loading, setLoading] = useState(true);
-    const [clients, setClients] = useState<any[]>([]);
+    const [clients, setClients] = useState<ClientRow[]>([]);
+    const [availableProfiles, setAvailableProfiles] = useState<AvailableProfile[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [newClient, setNewClient] = useState({
-        company_name: '',
         industry: '',
         engagement_start: new Date().toISOString().split('T')[0]
     });
+    const [selectedProfileId, setSelectedProfileId] = useState('');
+    const [formError, setFormError] = useState('');
     const [isCreating, setIsCreating] = useState(false);
 
     async function fetchClients() {
         setLoading(true);
         const { data, error } = await supabase
             .from('clients')
-            .select('*')
-            .order('company_name', { ascending: true });
+            .select('*, profiles:profile_id(full_name, company_name)');
 
-        if (data) {
-            setClients(data);
+        if (error) {
+            console.error('Error fetching clients:', error);
+            setClients([]);
+        } else if (data) {
+            setClients([...data].sort((a, b) => getClientCompanyName(a).localeCompare(getClientCompanyName(b))));
         }
         setLoading(false);
     }
 
+    async function fetchAvailableProfiles() {
+        const [{ data: profilesData, error: profilesError }, { data: clientsData, error: clientsError }] = await Promise.all([
+            supabase
+                .from('profiles')
+                .select('id, full_name, company_name')
+                .eq('role', 'client')
+                .order('full_name', { ascending: true }),
+            supabase
+                .from('clients')
+                .select('profile_id')
+        ]);
+
+        if (profilesError || clientsError) {
+            console.error('Error fetching profiles for onboarding:', profilesError || clientsError);
+            setAvailableProfiles([]);
+            return;
+        }
+
+        const linkedProfileIds = new Set((clientsData || []).map((client) => client.profile_id));
+        setAvailableProfiles((profilesData || []).filter((profile) => !linkedProfileIds.has(profile.id)));
+    }
+
     useEffect(() => {
+        // Initial data load for this client-only admin screen.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         fetchClients();
+        fetchAvailableProfiles();
     }, []);
 
     async function handleCreateClient() {
-        if (!newClient.company_name) return;
+        if (!selectedProfileId) return;
         setIsCreating(true);
+        setFormError('');
 
-        const { data, error } = await supabase
+        const { error } = await supabase
             .from('clients')
-            .insert(newClient)
-            .select()
+            .insert({
+                profile_id: selectedProfileId,
+                ...newClient
+            })
+            .select('id')
             .single();
 
         if (error) {
             console.error('Error creating client:', error);
+            setFormError(error.message || 'Unable to create engagement.');
         } else {
             setIsAddModalOpen(false);
             setNewClient({
-                company_name: '',
                 industry: '',
                 engagement_start: new Date().toISOString().split('T')[0]
             });
+            setSelectedProfileId('');
+            setAvailableProfiles((profiles) => profiles.filter((profile) => profile.id !== selectedProfileId));
             fetchClients();
+            fetchAvailableProfiles();
         }
         setIsCreating(false);
     }
@@ -90,7 +153,7 @@ export default function AdminClientListPage() {
     }
 
     const filteredClients = clients.filter(c =>
-        c.company_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        getClientCompanyName(c).toLowerCase().includes(searchQuery.toLowerCase()) ||
         c.industry?.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
@@ -180,8 +243,8 @@ export default function AdminClientListPage() {
                                             <Building2 className="w-5 h-5 text-indigo-400" />
                                         </div>
                                         <div>
-                                            <p className="text-sm font-bold text-white group-hover:text-indigo-400 transition-colors">{client.company_name}</p>
-                                            <p className="text-xs text-slate-500 mt-0.5 font-medium">PCM Strategic Consulting</p>
+                                            <p className="text-sm font-bold text-white group-hover:text-indigo-400 transition-colors">{getClientCompanyName(client)}</p>
+                                            <p className="text-xs text-slate-500 mt-0.5 font-medium">{getClientProfile(client)?.full_name || 'Client profile'}</p>
                                         </div>
                                     </div>
                                 </td>
@@ -219,7 +282,7 @@ export default function AdminClientListPage() {
                                             <ExternalLink className="w-4 h-4" />
                                         </Link>
                                         <button
-                                            onClick={() => handleDeleteClient(client.id, client.company_name)}
+                                            onClick={() => handleDeleteClient(client.id, getClientCompanyName(client))}
                                             className="p-2 rounded-lg bg-slate-800 text-slate-600 hover:text-red-400 transition-all border border-slate-700"
                                         >
                                             <Trash2 className="w-4 h-4" />
@@ -286,14 +349,22 @@ export default function AdminClientListPage() {
 
                             <div className="space-y-6">
                                 <div>
-                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Company Name</label>
-                                    <input
-                                        type="text"
-                                        placeholder="e.g. Acme Digital"
-                                        value={newClient.company_name}
-                                        onChange={(e) => setNewClient({ ...newClient, company_name: e.target.value })}
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Client Profile</label>
+                                    <select
+                                        value={selectedProfileId}
+                                        onChange={(e) => setSelectedProfileId(e.target.value)}
                                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
-                                    />
+                                    >
+                                        <option value="">Select an existing client profile...</option>
+                                        {availableProfiles.map((profile) => (
+                                            <option key={profile.id} value={profile.id}>
+                                                {profile.company_name || profile.full_name} ({profile.full_name})
+                                            </option>
+                                        ))}
+                                    </select>
+                                    {availableProfiles.length === 0 && (
+                                        <p className="mt-2 text-xs text-amber-400">Create a client user profile before starting a new engagement.</p>
+                                    )}
                                 </div>
 
                                 <div>
@@ -318,6 +389,12 @@ export default function AdminClientListPage() {
                                 </div>
                             </div>
 
+                            {formError && (
+                                <p className="mt-6 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-xs font-medium text-red-300">
+                                    {formError}
+                                </p>
+                            )}
+
                             <div className="mt-10 flex gap-3">
                                 <button
                                     onClick={() => setIsAddModalOpen(false)}
@@ -327,7 +404,7 @@ export default function AdminClientListPage() {
                                 </button>
                                 <button
                                     onClick={handleCreateClient}
-                                    disabled={isCreating || !newClient.company_name}
+                                    disabled={isCreating || !selectedProfileId}
                                     className="flex-[2] py-3 px-4 rounded-xl bg-indigo-600 text-white font-bold text-sm hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                 >
                                     {isCreating && <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />}
