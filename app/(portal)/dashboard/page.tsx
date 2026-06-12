@@ -45,7 +45,7 @@ export default function DashboardPage() {
             // 2. Fetch Client Engagement
             const { data: clientData } = await supabase
                 .from('clients')
-                .select('*')
+                .select('*, profiles:profile_id(company_name)')
                 .eq('profile_id', user.id)
                 .single();
 
@@ -53,7 +53,10 @@ export default function DashboardPage() {
                 setLoading(false);
                 return;
             }
-            setClient(clientData);
+            setClient({
+                ...clientData,
+                company_name: clientData.profiles?.company_name || profileData?.company_name
+            });
 
             // 3. Parallel fetching for stats and details
             const [
