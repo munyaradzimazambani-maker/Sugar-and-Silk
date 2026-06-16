@@ -40,7 +40,9 @@ export default function AdminClientListPage() {
             .select('*')
             .order('company_name', { ascending: true });
 
-        if (data) {
+        if (error) {
+            console.error('Error fetching clients:', error);
+        } else if (data) {
             setClients(data);
         }
         setLoading(false);
@@ -89,10 +91,11 @@ export default function AdminClientListPage() {
         }
     }
 
-    const filteredClients = clients.filter(c =>
-        c.company_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.industry?.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const filteredClients = clients.filter(c => {
+        const companyName = c.company_name ?? '';
+        return companyName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            c.industry?.toLowerCase().includes(searchQuery.toLowerCase());
+    });
 
     const container = {
         hidden: { opacity: 0 },
