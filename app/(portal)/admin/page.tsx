@@ -89,9 +89,10 @@ export default function AdminClientListPage() {
         }
     }
 
+    const normalizedSearchQuery = searchQuery.toLowerCase();
     const filteredClients = clients.filter(c =>
-        c.company_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.industry?.toLowerCase().includes(searchQuery.toLowerCase())
+        (c.company_name || '').toLowerCase().includes(normalizedSearchQuery) ||
+        (c.industry || '').toLowerCase().includes(normalizedSearchQuery)
     );
 
     const container = {
