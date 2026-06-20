@@ -11,6 +11,7 @@ import { createClient } from '@/lib/supabase/client';
 export default function LoginPage() {
     const router = useRouter();
     const supabase = createClient();
+    const showDemoCredentials = process.env.NEXT_PUBLIC_SHOW_DEMO_CREDENTIALS === 'true';
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
@@ -132,25 +133,27 @@ export default function LoginPage() {
                         </button>
                     </form>
 
-                    <div className="mt-8 pt-8 border-t border-slate-800 space-y-4">
-                        <p className="text-center text-[10px] font-bold text-slate-600 uppercase tracking-tighter">Demo Credentials</p>
-                        <div className="grid grid-cols-2 gap-3 text-[11px]">
-                            <div
-                                onClick={() => { setEmail('admin@pcm.com'); setPassword('password'); }}
-                                className="p-3 rounded-xl bg-slate-950 border border-slate-800 cursor-pointer hover:bg-slate-900 transition-colors text-center"
-                            >
-                                <p className="text-indigo-400 font-bold">Admin View</p>
-                                <p className="text-slate-600 mt-1">admin@pcm.com</p>
-                            </div>
-                            <div
-                                onClick={() => { setEmail('client@techflow.com'); setPassword('password'); }}
-                                className="p-3 rounded-xl bg-slate-950 border border-slate-800 cursor-pointer hover:bg-slate-900 transition-colors text-center"
-                            >
-                                <p className="text-blue-400 font-bold">Client View</p>
-                                <p className="text-slate-600 mt-1">client@techflow.com</p>
+                    {showDemoCredentials && (
+                        <div className="mt-8 pt-8 border-t border-slate-800 space-y-4">
+                            <p className="text-center text-[10px] font-bold text-slate-600 uppercase tracking-tighter">Demo Credentials</p>
+                            <div className="grid grid-cols-2 gap-3 text-[11px]">
+                                <div
+                                    onClick={() => { setEmail('admin@pcm.com'); setPassword('password'); }}
+                                    className="p-3 rounded-xl bg-slate-950 border border-slate-800 cursor-pointer hover:bg-slate-900 transition-colors text-center"
+                                >
+                                    <p className="text-indigo-400 font-bold">Admin View</p>
+                                    <p className="text-slate-600 mt-1">admin@pcm.com</p>
+                                </div>
+                                <div
+                                    onClick={() => { setEmail('client@techflow.com'); setPassword('password'); }}
+                                    className="p-3 rounded-xl bg-slate-950 border border-slate-800 cursor-pointer hover:bg-slate-900 transition-colors text-center"
+                                >
+                                    <p className="text-blue-400 font-bold">Client View</p>
+                                    <p className="text-slate-600 mt-1">client@techflow.com</p>
+                                </div>
                             </div>
                         </div>
-                    </div>
+                    )}
                 </div>
 
                 <p className="text-center text-slate-600 text-[11px] mt-8 font-medium">
