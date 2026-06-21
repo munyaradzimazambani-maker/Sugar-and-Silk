@@ -41,6 +41,7 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
     const [documents, setDocuments] = useState<any[]>([]);
     const [roadmapPhases, setRoadmapPhases] = useState<any[]>([]);
     const [uploading, setUploading] = useState(false);
+    const [uploadError, setUploadError] = useState<string | null>(null);
 
     // Modal states
     const [activeModal, setActiveModal] = useState<'maturity' | 'kpi' | 'task' | 'roadmap' | null>(null);
@@ -135,6 +136,53 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
         : '0.0';
 
     const completedTasks = tasks.filter(t => t.status === 'done').length;
+
+    async function handleDocumentUpload(file: File) {
+        setUploading(true);
+        setUploadError(null);
+
+        const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_') || 'uploaded-file';
+        const filePath = `${client.id}/${crypto.randomUUID()}-${safeFileName}`;
+
+        try {
+            const { error: storageError } = await supabase.storage
+                .from('documents')
+                .upload(filePath, file);
+
+            if (storageError) {
+                console.error('Error uploading file:', storageError);
+                setUploadError('The file could not be uploaded. Please try again.');
+                return;
+            }
+
+            const { error: dbError } = await supabase
+                .from('documents')
+                .insert({
+                    client_id: client.id,
+                    title: file.name,
+                    file_url: filePath,
+                    category: 'other',
+                    uploaded_at: new Date().toISOString()
+                });
+
+            if (dbError) {
+                console.error('Error saving document record:', dbError);
+                await supabase.storage.from('documents').remove([filePath]);
+                setUploadError('The file was uploaded but could not be saved in the document vault. Please try again.');
+                return;
+            }
+
+            const { data: updatedDocs } = await supabase
+                .from('documents')
+                .select('*')
+                .eq('client_id', client.id)
+                .order('uploaded_at', { ascending: false });
+
+            setDocuments(updatedDocs || []);
+        } finally {
+            setUploading(false);
+        }
+    }
 
     return (
         <motion.div
@@ -530,49 +578,13 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
                                     type="file"
                                     id="file-upload"
                                     className="hidden"
+                                    disabled={uploading}
                                     onChange={async (e) => {
                                         const file = e.target.files?.[0];
                                         if (!file) return;
-
-                                        setUploading(true);
-                                        const fileExt = file.name.split('.').pop();
-                                        const filePath = `${client.id}/${Math.random()}.${fileExt}`;
-
-                                        // 1. Upload to Supabase Storage
-                                        const { error: uploadError } = await supabase.storage
-                                            .from('documents')
-                                            .upload(filePath, file);
-
-                                        if (uploadError) {
-                                            console.error('Error uploading file:', uploadError);
-                                            setUploading(false);
-                                            return;
-                                        }
-
-                                        // 2. Add record to documents table
-                                        const { error: dbError } = await supabase
-                                            .from('documents')
-                                            .insert({
-                                                client_id: client.id,
-                                                title: file.name,
-                                                file_url: filePath,
-                                                category: 'other',
-                                                uploaded_at: new Date().toISOString()
-                                            });
-
-                                        if (dbError) {
-                                            console.error('Error saving document record:', dbError);
-                                        }
-
-                                        // 3. Refresh list
-                                        const { data: updatedDocs } = await supabase
-                                            .from('documents')
-                                            .select('*')
-                                            .eq('client_id', client.id)
-                                            .order('uploaded_at', { ascending: false });
-
-                                        setDocuments(updatedDocs || []);
-                                        setUploading(false);
+                                        const input = e.currentTarget;
+                                        await handleDocumentUpload(file);
+                                        input.value = '';
                                     }}
                                 />
                                 <label
@@ -587,6 +599,11 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
                                 </label>
                             </div>
                         </div>
+                        {uploadError && (
+                            <div className="mb-6 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm font-medium text-red-300">
+                                {uploadError}
+                            </div>
+                        )}
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {documents.map((doc) => (
