@@ -27,10 +27,13 @@ import {
     X
 } from 'lucide-react';
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
 
-export default function AdminClientDetailPage({ params }: { params: { id: string } }) {
+export default function AdminClientDetailPage() {
+    const params = useParams<{ id: string }>();
+    const clientId = params.id;
     const supabase = createClient();
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'overview' | 'maturity' | 'kpis' | 'tasks' | 'documents' | 'roadmap'>('overview');
@@ -41,6 +44,7 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
     const [documents, setDocuments] = useState<any[]>([]);
     const [roadmapPhases, setRoadmapPhases] = useState<any[]>([]);
     const [uploading, setUploading] = useState(false);
+    const [uploadError, setUploadError] = useState<string | null>(null);
 
     // Modal states
     const [activeModal, setActiveModal] = useState<'maturity' | 'kpi' | 'task' | 'roadmap' | null>(null);
@@ -55,7 +59,7 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
             const { data: clientData } = await supabase
                 .from('clients')
                 .select('*')
-                .eq('id', params.id)
+                .eq('id', clientId)
                 .single();
 
             if (!clientData) {
@@ -72,11 +76,11 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
                 { data: documentsData },
                 { data: roadmapData }
             ] = await Promise.all([
-                supabase.from('maturity_scores').select('*').eq('client_id', params.id).order('dimension', { ascending: true }),
-                supabase.from('tasks').select('*').eq('client_id', params.id).order('due_date', { ascending: true }),
-                supabase.from('kpis').select('*').eq('client_id', params.id),
-                supabase.from('documents').select('*').eq('client_id', params.id).order('uploaded_at', { ascending: false }),
-                supabase.from('roadmap_phases').select('*').eq('client_id', params.id).order('phase_number', { ascending: true })
+                supabase.from('maturity_scores').select('*').eq('client_id', clientId).order('dimension', { ascending: true }),
+                supabase.from('tasks').select('*').eq('client_id', clientId).order('due_date', { ascending: true }),
+                supabase.from('kpis').select('*').eq('client_id', clientId),
+                supabase.from('documents').select('*').eq('client_id', clientId).order('uploaded_at', { ascending: false }),
+                supabase.from('roadmap_phases').select('*').eq('client_id', clientId).order('phase_number', { ascending: true })
             ]);
 
             setMaturityScores(maturityData || []);
@@ -87,7 +91,7 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
             setLoading(false);
         }
         fetchClientData();
-    }, [params.id]);
+    }, [clientId]);
 
     const tabs = [
         { id: 'overview', label: 'Overview', icon: Building2 },
@@ -535,8 +539,9 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
                                         if (!file) return;
 
                                         setUploading(true);
+                                        setUploadError(null);
                                         const fileExt = file.name.split('.').pop();
-                                        const filePath = `${client.id}/${Math.random()}.${fileExt}`;
+                                        const filePath = `${client.id}/${crypto.randomUUID()}${fileExt ? `.${fileExt}` : ''}`;
 
                                         // 1. Upload to Supabase Storage
                                         const { error: uploadError } = await supabase.storage
@@ -545,7 +550,9 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
 
                                         if (uploadError) {
                                             console.error('Error uploading file:', uploadError);
+                                            setUploadError('Upload failed. Please try again.');
                                             setUploading(false);
+                                            e.currentTarget.value = '';
                                             return;
                                         }
 
@@ -562,6 +569,13 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
 
                                         if (dbError) {
                                             console.error('Error saving document record:', dbError);
+                                            await supabase.storage
+                                                .from('documents')
+                                                .remove([filePath]);
+                                            setUploadError('Upload failed while saving document metadata. Please try again.');
+                                            setUploading(false);
+                                            e.currentTarget.value = '';
+                                            return;
                                         }
 
                                         // 3. Refresh list
@@ -573,6 +587,7 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
 
                                         setDocuments(updatedDocs || []);
                                         setUploading(false);
+                                        e.currentTarget.value = '';
                                     }}
                                 />
                                 <label
@@ -585,6 +600,11 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
                                     {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
                                     {uploading ? 'Uploading...' : 'Upload Asset'}
                                 </label>
+                                {uploadError && (
+                                    <p className="absolute right-0 mt-2 w-64 text-xs text-red-400 text-right">
+                                        {uploadError}
+                                    </p>
+                                )}
                             </div>
                         </div>
 

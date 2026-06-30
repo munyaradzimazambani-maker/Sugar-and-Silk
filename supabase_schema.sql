@@ -15,6 +15,7 @@ CREATE TABLE profiles (
 CREATE TABLE clients (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   profile_id UUID REFERENCES profiles(id),
+  company_name TEXT NOT NULL,
   industry TEXT,
   engagement_start DATE DEFAULT CURRENT_DATE,
   engagement_status TEXT CHECK (engagement_status IN ('active', 'paused', 'completed')) DEFAULT 'active',
@@ -107,67 +108,94 @@ ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE activity_log ENABLE ROW LEVEL SECURITY;
 
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN
+LANGUAGE SQL
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.profiles
+    WHERE id = auth.uid()
+      AND role = 'admin'
+  );
+$$;
+
 -- 1. Profiles
 CREATE POLICY admin_full_access_profiles ON profiles FOR ALL TO authenticated 
-USING (auth.jwt() ->> 'role' = 'admin');
+USING (public.is_admin())
+WITH CHECK (public.is_admin());
 
 CREATE POLICY client_read_own_profile ON profiles FOR SELECT TO authenticated 
 USING (auth.uid() = id);
 
 -- 2. Clients
 CREATE POLICY admin_full_access_clients ON clients FOR ALL TO authenticated 
-USING (auth.jwt() ->> 'role' = 'admin');
+USING (public.is_admin())
+WITH CHECK (public.is_admin());
 
 CREATE POLICY client_read_own_engagement ON clients FOR SELECT TO authenticated 
 USING (profile_id = auth.uid());
 
 -- 3. Maturity Scores
 CREATE POLICY admin_full_access_maturity ON maturity_scores FOR ALL TO authenticated 
-USING (auth.jwt() ->> 'role' = 'admin');
+USING (public.is_admin())
+WITH CHECK (public.is_admin());
 
 CREATE POLICY client_read_own_maturity ON maturity_scores FOR SELECT TO authenticated 
 USING (client_id IN (SELECT id FROM clients WHERE profile_id = auth.uid()));
 
 -- 4. Roadmap Phases
 CREATE POLICY admin_full_access_roadmap ON roadmap_phases FOR ALL TO authenticated 
-USING (auth.jwt() ->> 'role' = 'admin');
+USING (public.is_admin())
+WITH CHECK (public.is_admin());
 
 CREATE POLICY client_read_own_roadmap ON roadmap_phases FOR SELECT TO authenticated 
 USING (client_id IN (SELECT id FROM clients WHERE profile_id = auth.uid()));
 
 -- 5. KPIs
 CREATE POLICY admin_full_access_kpis ON kpis FOR ALL TO authenticated 
-USING (auth.jwt() ->> 'role' = 'admin');
+USING (public.is_admin())
+WITH CHECK (public.is_admin());
 
 CREATE POLICY client_read_own_kpis ON kpis FOR SELECT TO authenticated 
 USING (client_id IN (SELECT id FROM clients WHERE profile_id = auth.uid()));
 
 -- 6. Documents
 CREATE POLICY admin_full_access_documents ON documents FOR ALL TO authenticated 
-USING (auth.jwt() ->> 'role' = 'admin');
+USING (public.is_admin())
+WITH CHECK (public.is_admin());
 
 CREATE POLICY client_read_own_documents ON documents FOR SELECT TO authenticated 
 USING (client_id IN (SELECT id FROM clients WHERE profile_id = auth.uid()));
 
 -- 7. Tasks
 CREATE POLICY admin_full_access_tasks ON tasks FOR ALL TO authenticated 
-USING (auth.jwt() ->> 'role' = 'admin');
+USING (public.is_admin())
+WITH CHECK (public.is_admin());
 
 CREATE POLICY client_read_own_tasks ON tasks FOR SELECT TO authenticated 
 USING (client_id IN (SELECT id FROM clients WHERE profile_id = auth.uid()));
 
 -- 8. Activity Log
 CREATE POLICY admin_full_access_activity ON activity_log FOR ALL TO authenticated 
-USING (auth.jwt() ->> 'role' = 'admin');
+USING (public.is_admin())
+WITH CHECK (public.is_admin());
 
 CREATE POLICY client_read_own_activity ON activity_log FOR SELECT TO authenticated 
 USING (client_id IN (SELECT id FROM clients WHERE profile_id = auth.uid()));
 
 -- STORAGE POLICIES (for 'documents' bucket) --
 
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('documents', 'documents', false)
+ON CONFLICT (id) DO UPDATE SET public = false;
+
 -- Allow admins full access to all storage objects
 CREATE POLICY admin_full_storage_access ON storage.objects FOR ALL TO authenticated
-USING (bucket_id = 'documents' AND (auth.jwt() ->> 'role' = 'admin'));
+USING (bucket_id = 'documents' AND public.is_admin())
+WITH CHECK (bucket_id = 'documents' AND public.is_admin());
 
 -- Allow clients to view/download their own documents
 -- (Note: We use signed URLs in the app, but this adds a second layer of security)
