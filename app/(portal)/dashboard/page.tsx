@@ -17,7 +17,6 @@ export default function DashboardPage() {
     const supabase = createClient();
     const [loading, setLoading] = useState(true);
     const [profile, setProfile] = useState<any>(null);
-    const [client, setClient] = useState<any>(null);
     const [stats, setStats] = useState({
         avgMaturity: 0,
         activeTasks: 0,
@@ -53,7 +52,6 @@ export default function DashboardPage() {
                 setLoading(false);
                 return;
             }
-            setClient(clientData);
 
             // 3. Parallel fetching for stats and details
             const [
@@ -123,7 +121,7 @@ export default function DashboardPage() {
             {/* Welcome Section */}
             <section>
                 <h2 className="text-3xl font-bold text-white tracking-tight">Welcome back, {profile?.full_name?.split(' ')[0] || 'Strategic Partner'}</h2>
-                <p className="text-slate-400 mt-1">Here is the latest pulse on your digital strategy for {client?.company_name || 'your organization'}.</p>
+                <p className="text-slate-400 mt-1">Here is the latest pulse on your digital strategy for {profile?.company_name || 'your organization'}.</p>
             </section>
 
             {/* Stats Grid */}

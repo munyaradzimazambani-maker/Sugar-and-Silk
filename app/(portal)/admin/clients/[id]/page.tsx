@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ChangeEvent } from 'react';
 import { motion } from 'framer-motion';
 import {
     Building2,
@@ -27,10 +27,13 @@ import {
     X
 } from 'lucide-react';
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
 
-export default function AdminClientDetailPage({ params }: { params: { id: string } }) {
+export default function AdminClientDetailPage() {
+    const params = useParams<{ id: string }>();
+    const clientId = params.id;
     const supabase = createClient();
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'overview' | 'maturity' | 'kpis' | 'tasks' | 'documents' | 'roadmap'>('overview');
@@ -41,6 +44,7 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
     const [documents, setDocuments] = useState<any[]>([]);
     const [roadmapPhases, setRoadmapPhases] = useState<any[]>([]);
     const [uploading, setUploading] = useState(false);
+    const [documentError, setDocumentError] = useState<string | null>(null);
 
     // Modal states
     const [activeModal, setActiveModal] = useState<'maturity' | 'kpi' | 'task' | 'roadmap' | null>(null);
@@ -50,12 +54,16 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
     useEffect(() => {
         async function fetchClientData() {
             setLoading(true);
+            if (!clientId) {
+                setLoading(false);
+                return;
+            }
 
             // 1. Fetch Client
             const { data: clientData } = await supabase
                 .from('clients')
-                .select('*')
-                .eq('id', params.id)
+                .select('*, profiles(id, full_name, company_name)')
+                .eq('id', clientId)
                 .single();
 
             if (!clientData) {
@@ -72,11 +80,11 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
                 { data: documentsData },
                 { data: roadmapData }
             ] = await Promise.all([
-                supabase.from('maturity_scores').select('*').eq('client_id', params.id).order('dimension', { ascending: true }),
-                supabase.from('tasks').select('*').eq('client_id', params.id).order('due_date', { ascending: true }),
-                supabase.from('kpis').select('*').eq('client_id', params.id),
-                supabase.from('documents').select('*').eq('client_id', params.id).order('uploaded_at', { ascending: false }),
-                supabase.from('roadmap_phases').select('*').eq('client_id', params.id).order('phase_number', { ascending: true })
+                supabase.from('maturity_scores').select('*').eq('client_id', clientId).order('dimension', { ascending: true }),
+                supabase.from('tasks').select('*').eq('client_id', clientId).order('due_date', { ascending: true }),
+                supabase.from('kpis').select('*').eq('client_id', clientId),
+                supabase.from('documents').select('*').eq('client_id', clientId).order('uploaded_at', { ascending: false }),
+                supabase.from('roadmap_phases').select('*').eq('client_id', clientId).order('phase_number', { ascending: true })
             ]);
 
             setMaturityScores(maturityData || []);
@@ -87,7 +95,56 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
             setLoading(false);
         }
         fetchClientData();
-    }, [params.id]);
+    }, [clientId]);
+
+    const clientName = client?.profiles?.company_name || client?.profiles?.full_name || 'Client';
+
+    async function handleDocumentUpload(e: ChangeEvent<HTMLInputElement>) {
+        const file = e.target.files?.[0];
+        if (!file || !clientId) return;
+
+        setUploading(true);
+        setDocumentError(null);
+
+        const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const filePath = `${clientId}/${crypto.randomUUID()}-${safeFileName}`;
+
+        try {
+            const { error: uploadError } = await supabase.storage
+                .from('documents')
+                .upload(filePath, file);
+
+            if (uploadError) {
+                console.error('Error uploading file:', uploadError);
+                setDocumentError('Document upload failed. Please try again.');
+                return;
+            }
+
+            const { data, error: dbError } = await supabase
+                .from('documents')
+                .insert({
+                    client_id: clientId,
+                    title: file.name,
+                    file_url: filePath,
+                    category: 'other',
+                    uploaded_at: new Date().toISOString()
+                })
+                .select()
+                .single();
+
+            if (dbError) {
+                await supabase.storage.from('documents').remove([filePath]);
+                console.error('Error saving document record:', dbError);
+                setDocumentError('Document metadata could not be saved, so the uploaded file was rolled back.');
+                return;
+            }
+
+            setDocuments((prev) => [data, ...prev]);
+            e.target.value = '';
+        } finally {
+            setUploading(false);
+        }
+    }
 
     const tabs = [
         { id: 'overview', label: 'Overview', icon: Building2 },
@@ -154,7 +211,7 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
                     </Link>
                     <div>
                         <div className="flex items-center gap-2">
-                            <h2 className="text-3xl font-bold text-white tracking-tight">{client.company_name}</h2>
+                            <h2 className="text-3xl font-bold text-white tracking-tight">{clientName}</h2>
                             <span className={cn(
                                 "px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest border",
                                 client.engagement_status === 'active' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-slate-800 text-slate-500 border-slate-700"
@@ -210,7 +267,7 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
                                     <Edit3 className="w-4 h-4 text-slate-500" />
                                 </div>
                                 <div className="prose prose-invert max-w-none text-slate-400 leading-relaxed text-sm">
-                                    <p>Engagement with {client.company_name} is focused on digital infrastructure modernization and lead generation optimization. Current focus is transitioning past foundational assessment into active implementation of CRM and automation workflows.</p>
+                                    <p>Engagement with {clientName} is focused on digital infrastructure modernization and lead generation optimization. Current focus is transitioning past foundational assessment into active implementation of CRM and automation workflows.</p>
                                     <p className="mt-4 font-semibold text-indigo-400">Next Major Milestone: Phase {maturityScores.length > 0 ? 'Review' : 'Initialization'}</p>
                                 </div>
                             </div>
@@ -252,7 +309,7 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
                                 <h4 className="text-sm font-bold text-white uppercase tracking-widest mb-6 text-slate-500">Internal Audit Logs</h4>
                                 <div className="space-y-4">
                                     <div className="p-4 rounded-xl bg-slate-950 border border-slate-800">
-                                        <p className="text-xs text-slate-400 leading-relaxed italic">"Initial data suggests {client.company_name} has high potential for automation roi. CEO and COO are aligned on the transition."</p>
+                                        <p className="text-xs text-slate-400 leading-relaxed italic">"Initial data suggests {clientName} has high potential for automation roi. CEO and COO are aligned on the transition."</p>
                                         <div className="mt-3 flex items-center justify-between">
                                             <span className="text-[10px] text-slate-600 uppercase font-bold tracking-tight">Automated Log • By PCM System</span>
                                         </div>
@@ -530,50 +587,7 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
                                     type="file"
                                     id="file-upload"
                                     className="hidden"
-                                    onChange={async (e) => {
-                                        const file = e.target.files?.[0];
-                                        if (!file) return;
-
-                                        setUploading(true);
-                                        const fileExt = file.name.split('.').pop();
-                                        const filePath = `${client.id}/${Math.random()}.${fileExt}`;
-
-                                        // 1. Upload to Supabase Storage
-                                        const { error: uploadError } = await supabase.storage
-                                            .from('documents')
-                                            .upload(filePath, file);
-
-                                        if (uploadError) {
-                                            console.error('Error uploading file:', uploadError);
-                                            setUploading(false);
-                                            return;
-                                        }
-
-                                        // 2. Add record to documents table
-                                        const { error: dbError } = await supabase
-                                            .from('documents')
-                                            .insert({
-                                                client_id: client.id,
-                                                title: file.name,
-                                                file_url: filePath,
-                                                category: 'other',
-                                                uploaded_at: new Date().toISOString()
-                                            });
-
-                                        if (dbError) {
-                                            console.error('Error saving document record:', dbError);
-                                        }
-
-                                        // 3. Refresh list
-                                        const { data: updatedDocs } = await supabase
-                                            .from('documents')
-                                            .select('*')
-                                            .eq('client_id', client.id)
-                                            .order('uploaded_at', { ascending: false });
-
-                                        setDocuments(updatedDocs || []);
-                                        setUploading(false);
-                                    }}
+                                    onChange={handleDocumentUpload}
                                 />
                                 <label
                                     htmlFor="file-upload"
@@ -587,6 +601,9 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
                                 </label>
                             </div>
                         </div>
+                        {documentError && (
+                            <p className="mb-4 text-sm font-medium text-red-400">{documentError}</p>
+                        )}
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {documents.map((doc) => (
@@ -607,6 +624,7 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
                                                     .from('documents')
                                                     .createSignedUrl(doc.file_url, 60);
                                                 if (data?.signedUrl) window.open(data.signedUrl, '_blank');
+                                                if (error) console.error('Error generating signed URL:', error);
                                             }}
                                             className="p-2 text-slate-600 hover:text-indigo-400 transition-colors"
                                         >
@@ -792,46 +810,55 @@ export default function AdminClientDetailPage({ params }: { params: { id: string
                                 <button
                                     onClick={async () => {
                                         setIsSubmitting(true);
-                                        if (activeModal === 'maturity') {
-                                            const { data, error } = await supabase.from('maturity_scores').insert({
-                                                client_id: params.id,
-                                                dimension: formData.dimension,
-                                                score: 1,
-                                                assessed_at: new Date().toISOString().split('T')[0]
-                                            }).select().single();
-                                            if (data) setMaturityScores(prev => [...prev, data]);
-                                        } else if (activeModal === 'kpi') {
-                                            const { data, error } = await supabase.from('kpis').insert({
-                                                client_id: params.id,
-                                                name: formData.name,
-                                                value: formData.value,
-                                                target: formData.target,
-                                                category: formData.category,
-                                                recorded_at: new Date().toISOString().split('T')[0]
-                                            }).select().single();
-                                            if (data) setKpis(prev => [...prev, data]);
-                                        } else if (activeModal === 'task') {
-                                            const { data, error } = await supabase.from('tasks').insert({
-                                                client_id: params.id,
-                                                title: formData.title,
-                                                status: 'todo',
-                                                priority: formData.priority,
-                                                due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-                                            }).select().single();
-                                            if (data) setTasks(prev => [...prev, data]);
-                                        } else if (activeModal === 'roadmap') {
-                                            const { data, error } = await supabase.from('roadmap_phases').insert({
-                                                client_id: params.id,
-                                                title: formData.title,
-                                                phase_number: formData.phase_number,
-                                                status: 'not_started',
-                                                start_date: new Date().toISOString().split('T')[0],
-                                                end_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-                                            }).select().single();
-                                            if (data) setRoadmapPhases(prev => [...prev, data]);
+                                        try {
+                                            if (activeModal === 'maturity') {
+                                                const { data, error } = await supabase.from('maturity_scores').insert({
+                                                    client_id: clientId,
+                                                    dimension: formData.dimension,
+                                                    score: 1,
+                                                    assessed_at: new Date().toISOString().split('T')[0]
+                                                }).select().single();
+                                                if (error) throw error;
+                                                if (data) setMaturityScores(prev => [...prev, data]);
+                                            } else if (activeModal === 'kpi') {
+                                                const { data, error } = await supabase.from('kpis').insert({
+                                                    client_id: clientId,
+                                                    name: formData.name,
+                                                    value: formData.value,
+                                                    target: formData.target,
+                                                    category: formData.category,
+                                                    recorded_at: new Date().toISOString().split('T')[0]
+                                                }).select().single();
+                                                if (error) throw error;
+                                                if (data) setKpis(prev => [...prev, data]);
+                                            } else if (activeModal === 'task') {
+                                                const { data, error } = await supabase.from('tasks').insert({
+                                                    client_id: clientId,
+                                                    title: formData.title,
+                                                    status: 'todo',
+                                                    priority: formData.priority,
+                                                    due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+                                                }).select().single();
+                                                if (error) throw error;
+                                                if (data) setTasks(prev => [...prev, data]);
+                                            } else if (activeModal === 'roadmap') {
+                                                const { data, error } = await supabase.from('roadmap_phases').insert({
+                                                    client_id: clientId,
+                                                    title: formData.title,
+                                                    phase_number: formData.phase_number,
+                                                    status: 'not_started',
+                                                    start_date: new Date().toISOString().split('T')[0],
+                                                    end_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+                                                }).select().single();
+                                                if (error) throw error;
+                                                if (data) setRoadmapPhases(prev => [...prev, data]);
+                                            }
+                                            setActiveModal(null);
+                                        } catch (error) {
+                                            console.error('Error saving engagement update:', error);
+                                        } finally {
+                                            setIsSubmitting(false);
                                         }
-                                        setIsSubmitting(false);
-                                        setActiveModal(null);
                                     }}
                                     disabled={isSubmitting || (activeModal === 'maturity' && !formData.dimension) || (activeModal === 'kpi' && !formData.name) || (activeModal === 'task' && !formData.title) || (activeModal === 'roadmap' && !formData.title)}
                                     className="flex-[2] py-3 px-4 rounded-xl bg-indigo-600 text-white font-bold text-sm hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
