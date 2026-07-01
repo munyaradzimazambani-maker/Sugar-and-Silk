@@ -17,7 +17,6 @@ export default function DashboardPage() {
     const supabase = createClient();
     const [loading, setLoading] = useState(true);
     const [profile, setProfile] = useState<any>(null);
-    const [client, setClient] = useState<any>(null);
     const [stats, setStats] = useState({
         avgMaturity: 0,
         activeTasks: 0,
@@ -53,7 +52,6 @@ export default function DashboardPage() {
                 setLoading(false);
                 return;
             }
-            setClient(clientData);
 
             // 3. Parallel fetching for stats and details
             const [
