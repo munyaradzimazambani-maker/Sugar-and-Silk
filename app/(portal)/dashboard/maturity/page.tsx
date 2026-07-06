@@ -23,7 +23,10 @@ export default function MaturityScorePage() {
         async function fetchMaturityData() {
             setLoading(true);
             const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return;
+            if (!user) {
+                setLoading(false);
+                return;
+            }
 
             const { data: clientData } = await supabase
                 .from('clients')

@@ -26,7 +26,10 @@ export default function ActivityTimelinePage() {
         async function fetchActivity() {
             setLoading(true);
             const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return;
+            if (!user) {
+                setLoading(false);
+                return;
+            }
 
             const { data: clientData } = await supabase
                 .from('clients')
