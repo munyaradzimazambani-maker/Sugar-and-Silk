@@ -27,7 +27,10 @@ export default function DocumentVaultPage() {
         async function fetchDocuments() {
             setLoading(true);
             const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return;
+            if (!user) {
+                setLoading(false);
+                return;
+            }
 
             const { data: clientData } = await supabase
                 .from('clients')
