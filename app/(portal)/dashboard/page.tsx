@@ -32,7 +32,10 @@ export default function DashboardPage() {
             setLoading(true);
             const { data: { user } } = await supabase.auth.getUser();
 
-            if (!user) return;
+            if (!user) {
+                setLoading(false);
+                return;
+            }
 
             // 1. Fetch Profile
             const { data: profileData } = await supabase
