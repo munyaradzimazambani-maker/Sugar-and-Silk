@@ -31,6 +31,12 @@ import { useParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
 
+type DocumentRecord = {
+    id: string;
+    title: string;
+    file_url: string;
+};
+
 export default function AdminClientDetailPage() {
     const { id } = useParams<{ id: string }>();
     const supabase = createClient();
@@ -168,7 +174,7 @@ export default function AdminClientDetailPage() {
         setUploading(false);
     }
 
-    async function handleDeleteDocument(doc: any) {
+    async function handleDeleteDocument(doc: DocumentRecord) {
         if (!confirm(`Delete ${doc.title}? This cannot be undone.`)) return;
 
         setDocumentError(null);
