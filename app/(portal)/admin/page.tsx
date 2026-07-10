@@ -90,8 +90,8 @@ export default function AdminClientListPage() {
     }
 
     const filteredClients = clients.filter(c =>
-        c.company_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.industry?.toLowerCase().includes(searchQuery.toLowerCase())
+        (c.company_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (c.industry || '').toLowerCase().includes(searchQuery.toLowerCase())
     );
 
     const container = {
@@ -180,7 +180,7 @@ export default function AdminClientListPage() {
                                             <Building2 className="w-5 h-5 text-indigo-400" />
                                         </div>
                                         <div>
-                                            <p className="text-sm font-bold text-white group-hover:text-indigo-400 transition-colors">{client.company_name}</p>
+                                            <p className="text-sm font-bold text-white group-hover:text-indigo-400 transition-colors">{client.company_name || 'Unnamed client'}</p>
                                             <p className="text-xs text-slate-500 mt-0.5 font-medium">PCM Strategic Consulting</p>
                                         </div>
                                     </div>
@@ -219,7 +219,7 @@ export default function AdminClientListPage() {
                                             <ExternalLink className="w-4 h-4" />
                                         </Link>
                                         <button
-                                            onClick={() => handleDeleteClient(client.id, client.company_name)}
+                                            onClick={() => handleDeleteClient(client.id, client.company_name || 'this client')}
                                             className="p-2 rounded-lg bg-slate-800 text-slate-600 hover:text-red-400 transition-all border border-slate-700"
                                         >
                                             <Trash2 className="w-4 h-4" />
