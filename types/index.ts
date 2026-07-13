@@ -16,7 +16,7 @@ export interface Client {
   engagement_start: string;
   engagement_status: 'active' | 'paused' | 'completed';
   notes?: string;
-  company_name?: string; // Joined from profile
+  company_name: string;
 }
 
 export interface MaturityScore {
